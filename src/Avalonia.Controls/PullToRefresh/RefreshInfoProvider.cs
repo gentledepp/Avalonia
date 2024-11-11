@@ -62,6 +62,17 @@ namespace Avalonia.Controls.PullToRefresh
                 if (isInteractingForRefresh != _isInteractingForRefresh)
                 {
                     SetAndRaise(IsInteractingForRefreshProperty, ref _isInteractingForRefresh, isInteractingForRefresh);
+
+                    // Keep _entered in sync with IsInteractingForRefresh.
+                    // The flag can be cleared by paths other than PullGestureEnded
+                    // (ScrollViewer_ScrollChanged / ScrollViewer_PointerReleased on the adapter).
+                    // Without this, InteractingStateEntered would short-circuit and never
+                    // re-assert the flag for the rest of the gesture, leaving the visualizer
+                    // stuck in Idle and the spinner invisible until the next gesture.
+                    if (!isInteractingForRefresh)
+                    {
+                        _entered = false;
+                    }
                 }
             }
         }
@@ -150,7 +161,7 @@ namespace Avalonia.Controls.PullToRefresh
                     break;
                 case PullDirection.LeftToRight:
                 case PullDirection.RightToLeft:
-                    InteractionRatio = _refreshVisualizerSize.Height == 0 ? 1 : Math.Min(1, value.X / _refreshVisualizerSize.Width);
+                    InteractionRatio = _refreshVisualizerSize.Width == 0 ? 1 : Math.Min(1, value.X / _refreshVisualizerSize.Width);
                     break;
             }
         }

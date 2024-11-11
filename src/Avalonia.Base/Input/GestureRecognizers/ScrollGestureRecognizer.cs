@@ -68,7 +68,7 @@ namespace Avalonia.Input.GestureRecognizers
                 unsetValue: s_defaultScrollStartDistance);
 
         /// <summary>
-        /// Defines the <see cref="ScrollStartDistance"/> property.
+        /// Defines the <see cref="Offset"/> property.
         /// </summary>
         public static readonly DirectProperty<ScrollGestureRecognizer, Vector?> OffsetProperty =
             AvaloniaProperty.RegisterDirect<ScrollGestureRecognizer, Vector?>(nameof(Offset),
@@ -76,7 +76,7 @@ namespace Avalonia.Input.GestureRecognizers
                 unsetValue: null);
 
         /// <summary>
-        /// Defines the <see cref="ScrollStartDistance"/> property.
+        /// Defines the <see cref="Extent"/> property.
         /// </summary>
         public static readonly DirectProperty<ScrollGestureRecognizer, Size?> ExtentProperty =
             AvaloniaProperty.RegisterDirect<ScrollGestureRecognizer, Size?>(nameof(Extent),
@@ -84,7 +84,7 @@ namespace Avalonia.Input.GestureRecognizers
                 unsetValue: null);
 
         /// <summary>
-        /// Defines the <see cref="ScrollStartDistance"/> property.
+        /// Defines the <see cref="Viewport"/> property.
         /// </summary>
         public static readonly DirectProperty<ScrollGestureRecognizer, Size?> ViewportProperty =
             AvaloniaProperty.RegisterDirect<ScrollGestureRecognizer, Size?>(nameof(Viewport),
