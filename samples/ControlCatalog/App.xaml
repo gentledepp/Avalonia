@@ -59,7 +59,7 @@
       <Setter Property="FontSize" Value="12" />
     </Style>
     <Style Selector="RefreshContainer">
-      <Setter Property="IsEnabledOnDesktop" Value="true" />
+      <Setter Property="IsMouseEnabled" Value="true" />
     </Style>
   </Application.Styles>
   <NativeDock.Menu>

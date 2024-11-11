@@ -56,22 +56,22 @@ namespace Avalonia.Controls
         }
         
         /// <summary>
-        /// Defines the <see cref="IsEnabledOnDesktop"/> property.
+        /// Defines the <see cref="IsMouseEnabled"/> property.
         /// </summary>
         /// <remarks>
-        /// By default disabled, allows to enable the pull 2 refresh gesture for desktop devices
+        /// Allows to enable the pull 2 refresh gesture for devices using a mouse. Disabled by default 
         /// </remarks>
-        public static readonly StyledProperty<bool> IsEnabledOnDesktopProperty =
-            AvaloniaProperty.Register<RefreshContainer, bool>(nameof(IsEnabledOnDesktop), false);
+        public static readonly StyledProperty<bool> IsMouseEnabledProperty =
+            AvaloniaProperty.Register<RefreshContainer, bool>(nameof(IsMouseEnabled), false);
         
         /// <summary>
         /// Gets or sets a value that indicates whether the pull-to-refresh gesture is enabled for desktop devices.
-        /// By default disabled, allows to enable the pull 2 refresh gesture for desktop devices.
+        /// Allows to enable the pull 2 refresh gesture for devices using a mouse. Disabled by default
         /// </summary>
-        public bool IsEnabledOnDesktop
+        public bool IsMouseEnabled
         {
-            get => GetValue(IsEnabledOnDesktopProperty);
-            set => SetValue(IsEnabledOnDesktopProperty, value);
+            get => GetValue(IsMouseEnabledProperty);
+            set => SetValue(IsMouseEnabledProperty, value);
         }
 
         /// <summary>
@@ -112,7 +112,7 @@ namespace Avalonia.Controls
         public RefreshContainer()
         {
             _hasDefaultRefreshInfoProviderAdapter = true;
-            _refreshInfoProviderAdapter = new ScrollViewerIRefreshInfoProviderAdapter(PullDirection, IsEnabledOnDesktop);
+            _refreshInfoProviderAdapter = new ScrollViewerIRefreshInfoProviderAdapter(PullDirection, IsMouseEnabled);
             RaisePropertyChanged(RefreshInfoProviderAdapterProperty, null, _refreshInfoProviderAdapter);
         }
 
@@ -147,9 +147,20 @@ namespace Avalonia.Controls
 
         private void Visualizer_RefreshRequested(object? sender, RefreshRequestedEventArgs e)
         {
+            // Guarantee the inner deferral is balanced even if a downstream handler
+            // of RefreshRequestedEvent throws synchronously from RaiseEvent.
+            // Without this, a synchronously-throwing consumer leaves the visualizer's
+            // deferral count above zero forever, so RefreshCompleted never fires and
+            // the spinner stays stuck in Refreshing.
             var ev = new RefreshRequestedEventArgs(e.GetDeferral(), RefreshRequestedEvent);
-            RaiseEvent(ev);
-            ev.DecrementCount();
+            try
+            {
+                RaiseEvent(ev);
+            }
+            finally
+            {
+                ev.DecrementCount();
+            }
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -200,9 +211,9 @@ namespace Avalonia.Controls
             {
                 OnPullDirectionChanged();
             }
-            else if (change.Property == IsEnabledOnDesktopProperty)
+            else if (change.Property == IsMouseEnabledProperty)
             {
-                OnIsEnabledOnDesktopChanged();
+                OnIsMouseEnabledChanged();
             }
         }
 
@@ -268,9 +279,9 @@ namespace Avalonia.Controls
             }
         }
 
-        private void OnIsEnabledOnDesktopChanged()
+        private void OnIsMouseEnabledChanged()
         {
-            _refreshInfoProviderAdapter?.UpdateIsEnabledOnDesktop(IsEnabledOnDesktop);
+            _refreshInfoProviderAdapter?.UpdateIsMouseEnabled(IsMouseEnabled);
         }
         
         /// <summary>
