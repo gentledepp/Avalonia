@@ -95,7 +95,7 @@ namespace Avalonia.Input
                 switch (PullDirection)
                 {
                     case PullDirection.TopToBottom:
-                        canPull = position.Y < Math.Max(MinPullDetectionSize, bounds.Height * 0.1);
+                        canPull = CanPullFromTopOverride(position, bounds);
                         break;
                     case PullDirection.BottomToTop:
                         canPull = position.Y > Math.Min(bounds.Height - MinPullDetectionSize, bounds.Height - (bounds.Height * 0.1));
@@ -115,6 +115,11 @@ namespace Avalonia.Input
                     _initialPosition = position;
                 }
             }
+        }
+
+        protected virtual bool CanPullFromTopOverride(Point position, Rect bounds)
+        {
+            return position.Y < Math.Max(MinPullDetectionSize, bounds.Height * 0.1);
         }
 
         protected override void PointerReleased(PointerReleasedEventArgs e)

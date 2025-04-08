@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Security.Cryptography.X509Certificates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Rendering.Composition;
@@ -124,7 +125,8 @@ namespace Avalonia.Controls.PullToRefresh
 
             _refreshInfoProvider = new RefreshInfoProvider(_refreshPullDirection, refreshVIsualizerSize, ElementComposition.GetElementVisual(content));
 
-            _pullGestureRecognizer = new PullGestureRecognizer(_refreshPullDirection);
+            // _pullGestureRecognizer = new PullGestureRecognizer(_refreshPullDirection);
+            _pullGestureRecognizer = new PullToRefreshGestureRecognizer(_refreshPullDirection);
 
             if (_interactionSource != null)
             {
@@ -139,6 +141,20 @@ namespace Avalonia.Controls.PullToRefresh
             _scrollViewer.ScrollChanged += ScrollViewer_ScrollChanged;
 
             return _refreshInfoProvider;
+        }
+
+        private class PullToRefreshGestureRecognizer : PullGestureRecognizer
+        {
+            public PullToRefreshGestureRecognizer()
+            {}
+
+            public PullToRefreshGestureRecognizer(PullDirection direction) : base(direction)
+            {}
+
+            protected override bool CanPullFromTopOverride(Point position, Rect bounds)
+            {
+                return Target is Avalonia.Controls.ScrollViewer sv && sv.Offset.Y == 0d;
+            }
         }
 
         private void ScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
