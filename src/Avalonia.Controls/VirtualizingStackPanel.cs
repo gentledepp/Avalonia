@@ -56,7 +56,7 @@ namespace Avalonia.Controls
         /// Defines the <see cref="BufferFactor"/> property.
         /// </summary>
         public static readonly StyledProperty<double> BufferFactorProperty =
-            AvaloniaProperty.Register<VirtualizingStackPanel, double>(nameof(BufferFactor), 0.5, 
+            AvaloniaProperty.Register<VirtualizingStackPanel, double>(nameof(BufferFactor), 0.0, 
                 validate: v => v is >= 0 and <= 2);
 
         /// <summary>
