@@ -618,7 +618,7 @@ namespace Avalonia.Controls.UnitTests
             scroll.Offset = new Vector(0, 200);
             Layout(target);
 
-            AssertRealizedItems(target, itemsControl, 10, 30);
+            AssertRealizedItems(target, itemsControl, 15, 20);
         }
 
         [Fact]
@@ -629,7 +629,7 @@ namespace Avalonia.Controls.UnitTests
 
             target.ScrollIntoView(20);
 
-            AssertRealizedItems(target, itemsControl, 1, 30);
+            AssertRealizedItems(target, itemsControl, 6, 20);
         }
 
         [Fact]
@@ -645,7 +645,7 @@ namespace Avalonia.Controls.UnitTests
 
             target.ScrollIntoView(20);
 
-            AssertRealizedItems(target, itemsControl, 10, 30);
+            AssertRealizedItems(target, itemsControl, 15, 20);
         }
 
         [Fact]
@@ -658,7 +658,7 @@ namespace Avalonia.Controls.UnitTests
             Layout(target);
             target.ScrollIntoView(20);
 
-            Assert.Equal(30, target.Children.Count);
+            Assert.Equal(21, target.Children.Count);
         }
 
         [Fact]
@@ -1198,7 +1198,7 @@ namespace Avalonia.Controls.UnitTests
             scroll.Offset = new Vector(0, 200);
             Layout(target);
 
-            Assert.Equal(20, raised);
+            Assert.Equal(15, raised);
         }
 
         [Fact]
@@ -1213,7 +1213,7 @@ namespace Avalonia.Controls.UnitTests
             scroll.Offset = new Vector(0, 200);
             Layout(target);
 
-            Assert.Equal(10, raised);
+            Assert.Equal(15, raised);
         }
 
         [Fact]
@@ -1244,7 +1244,7 @@ namespace Avalonia.Controls.UnitTests
             var (target, scroll, itemsControl) = CreateTarget();
             var items = (IList)itemsControl.ItemsSource!;
             var raised = 0;
-            var index = 10;
+            var index = 15;
 
             itemsControl.ContainerIndexChanged += (s, e) =>
             {
@@ -1258,7 +1258,7 @@ namespace Avalonia.Controls.UnitTests
 
             items.Insert(10, "new");
 
-            Assert.Equal(30, raised); // all 30 realized elements had their index changed
+            Assert.Equal(20, raised); // all 30 realized elements had their index changed
         }
 
         [Fact]
@@ -1289,7 +1289,7 @@ namespace Avalonia.Controls.UnitTests
             var (target, scroll, itemsControl) = CreateTarget();
             var items = (IList)itemsControl.ItemsSource!;
             var raised = 0;
-            var index = 11;
+            var index = 15;
 
             itemsControl.ContainerIndexChanged += (s, e) =>
             {
@@ -1304,7 +1304,7 @@ namespace Avalonia.Controls.UnitTests
 
             items.RemoveAt(10);
 
-            Assert.Equal(29, raised);
+            Assert.Equal(20, raised);
         }
 
         [Fact]
@@ -1622,14 +1622,14 @@ namespace Avalonia.Controls.UnitTests
             // Scroll down 20 items.
             scroll.Offset = new Vector(0, 200);
             target.UpdateLayout();
-            Assert.Equal(10, target.FirstRealizedIndex); // BufferFactor of 0.5 => 10 additional items before
+            Assert.Equal(15, target.FirstRealizedIndex); // BufferFactor of 0.5 => 10 additional items before
 
             // Insert an item at the beginning.
             items.Insert(0, "New Item");
             target.UpdateLayout();
 
-            // The first realized index should still be 20 as the scroll should be unchanged.
-            Assert.Equal(10, target.FirstRealizedIndex);
+            // The first realized index should still be 15 as the scroll should be unchanged.
+            Assert.Equal(15, target.FirstRealizedIndex);
             Assert.Equal(new(0, 200), scroll.Offset);
         }
 
@@ -1855,8 +1855,8 @@ namespace Avalonia.Controls.UnitTests
 
             // Scroll to the 5th item (containers 4 and 5 should be visible).
             target.ScrollIntoView(5);
-            Assert.Equal(2, target.FirstRealizedIndex); // BufferFactor 0.5
-            Assert.Equal(7, target.LastRealizedIndex);
+            Assert.Equal(3, target.FirstRealizedIndex); // BufferFactor 0.5
+            Assert.Equal(6, target.LastRealizedIndex);
 
             // The extent should be 500 (10 * 50) and the offset should be 200 (4 * 50).
             var container = Assert.IsType<ContentPresenter>(target.ContainerFromIndex(5));
@@ -1874,9 +1874,9 @@ namespace Avalonia.Controls.UnitTests
             // unchanged but the first realized index should be updated to 8 (200 / 25).
             Assert.Equal(new Size(100, 100), scroll.Viewport);
             Assert.Equal(new Size(100, 500), scroll.Extent);
-            Assert.Equal(new Vector(0, 100), scroll.Offset);
-            Assert.Equal(4, target.FirstRealizedIndex);
-            Assert.Equal(15, target.LastRealizedIndex);
+            Assert.Equal(new Vector(0, 200), scroll.Offset);
+            Assert.Equal(6, target.FirstRealizedIndex);
+            Assert.Equal(13, target.LastRealizedIndex);
         }
 
         [Fact]
@@ -1890,8 +1890,8 @@ namespace Avalonia.Controls.UnitTests
 
             // Scroll to the 5th item (containers 4 and 5 should be visible).
             target.ScrollIntoView(5);
-            Assert.Equal(2, target.FirstRealizedIndex);
-            Assert.Equal(7, target.LastRealizedIndex);
+            Assert.Equal(3, target.FirstRealizedIndex);
+            Assert.Equal(6, target.LastRealizedIndex);
 
             // Focus the 5th item.
             var container = Assert.IsType<ContentPresenter>(target.ContainerFromIndex(5));
@@ -1904,8 +1904,8 @@ namespace Avalonia.Controls.UnitTests
             target.UpdateLayout();
 
             // The focused container should now be outside the realized range.
-            Assert.Equal(4, target.FirstRealizedIndex); // + 4 additiona items because of BufferFactor 0.5
-            Assert.Equal(15, target.LastRealizedIndex); // + 4 additiona items because of BufferFactor 0.5
+            Assert.Equal(6, target.FirstRealizedIndex); // + 4 additional items because of BufferFactor 0.5
+            Assert.Equal(13, target.LastRealizedIndex); // + 4 additional items because of BufferFactor 0.5
 
             // The container should still exist and be positioned outside the visible viewport.
             container = Assert.IsType<ContentPresenter>(target.ContainerFromIndex(5));
