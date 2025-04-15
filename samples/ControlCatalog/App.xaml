@@ -58,9 +58,6 @@
     <Style Selector="Label.h3">
       <Setter Property="FontSize" Value="12" />
     </Style>
-    <Style Selector="VirtualizingStackPanel">
-      <Setter Property="BufferFactor" Value="0.5" />
-    </Style>
   </Application.Styles>
   <TrayIcon.Icons>
     <TrayIcons>
