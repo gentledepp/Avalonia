@@ -37,7 +37,128 @@ namespace Avalonia.Controls.UnitTests
                 Height = 100,
                 [!Layoutable.WidthProperty] = new Binding("Width"),
             });
+
         
+        [Fact]
+        public void When_Vertical_Calculates_ViewPort_At_Start_Of_List()
+        {
+            // Arrange
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithHeight(x)).ToList();
+            
+            // Act
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithHeightTemplate);
+
+            // Assert
+            Assert.Equal(0, target.ViewPort.Top);
+            Assert.Equal(100, target.ViewPort.Bottom);
+            
+            Assert.Equal(0, target.ExtendedViewPort.Top);
+            Assert.Equal(200, target.ExtendedViewPort.Bottom);
+        }
+        
+        [Fact]
+        public void When_Vertical_Calculates_ViewPort_At_End_Of_List()
+        {   
+            // Arrange
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithHeight(x)).ToList();
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithHeightTemplate);
+
+            // Act
+            scroll.Offset = new Vector(0, 910); // scroll to end
+            Layout(target);
+            
+            // Assert
+            Assert.Equal(900, target.ViewPort.Top);
+            Assert.Equal(1000, target.ViewPort.Bottom);
+            
+            Assert.Equal(800, target.ExtendedViewPort.Top);
+            Assert.Equal(1000, target.ExtendedViewPort.Bottom);
+        }
+        
+        [Fact]
+        public void When_Vertical_Calculates_ViewPort_In_Middle_Of_List()
+        {
+            // Arrange
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithHeight(x)).ToList();
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithHeightTemplate);
+
+            // Act
+            scroll.Offset = new Vector(0, 500); // scroll to end
+            Layout(target);
+            
+            // Assert
+            Assert.Equal(500, target.ViewPort.Top);
+            Assert.Equal(600, target.ViewPort.Bottom);
+            
+            Assert.Equal(450, target.ExtendedViewPort.Top);
+            Assert.Equal(650, target.ExtendedViewPort.Bottom);
+        }
+        
+        [Fact]
+        public void When_Horizontal_Calculates_ViewPort_At_Start_Of_List()
+        {
+            // Arrange
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithWidth(x)).ToList();
+            
+            // Act
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithWidthTemplate, orientation:Orientation.Horizontal);
+
+            // Assert
+            Assert.Equal(0, target.ViewPort.Left);
+            Assert.Equal(100, target.ViewPort.Right);
+            
+            Assert.Equal(0, target.ExtendedViewPort.Left);
+            Assert.Equal(200, target.ExtendedViewPort.Right);
+        }
+        
+        [Fact]
+        public void When_Horizontal_Calculates_ViewPort_At_End_Of_List()
+        {   
+            // Arrange
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithWidth(x)).ToList();
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithWidthTemplate, orientation:Orientation.Horizontal);
+            // Act
+            scroll.Offset = new Vector(900, 0); // scroll to end
+            Layout(target);
+            
+            // Assert
+            Assert.Equal(900, target.ViewPort.Left);
+            Assert.Equal(1000, target.ViewPort.Right);
+            
+            Assert.Equal(800, target.ExtendedViewPort.Left);
+            Assert.Equal(1000, target.ExtendedViewPort.Right);
+        }
+        
+        [Fact]
+        public void When_Horizontal_Calculates_ViewPort_In_Middle_Of_List()
+        {
+            // Arrange
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithWidth(x)).ToList();
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithWidthTemplate, orientation:Orientation.Horizontal);
+
+            // Act
+            scroll.Offset = new Vector(500, 0); // scroll to end
+            Layout(target);
+            
+            // Assert
+            Assert.Equal(500, target.ViewPort.Left);
+            Assert.Equal(600, target.ViewPort.Right);
+            
+            Assert.Equal(450, target.ExtendedViewPort.Left);
+            Assert.Equal(650, target.ExtendedViewPort.Right);
+        }
         
         [Fact]
         public void Scrolling_Down_Does_Not_Measure_Or_Arrange_Until_Extended_ViewPort_Bounds_Are_Reached()
@@ -239,7 +360,206 @@ namespace Avalonia.Controls.UnitTests
             }
         }
         
+        [Fact]
+        public void Scrolling_Right_Does_Not_Measure_Or_Arrange_Until_Extended_ViewPort_Bounds_Are_Reached()
+        {
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithWidthAndMeasureArrangeCount(x)).ToList();
+            
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithWidthTemplate, orientation:Orientation.Horizontal);
+            
+            Assert.True(target.LastRealizedIndex == 19,
+                $"Should show 20 items but last realized index was {target.LastRealizedIndex}");
 
+            // reset counters
+            target.ResetMeasureArrangeCounters();
+            // shows 20 items, each is 10 high.
+            // visible are 10 => need to scroll down 100px until the next 5 (visible*BufferFactor) additional items are added.
+            // until then no measure-arrange call should happen
+            
+            // Scroll down until the extended viewport bounds are reached
+            while (target.LastRealizedIndex < 20)
+            {
+                scroll.Offset = new Vector(scroll.Offset.X + 5, 0);
+                Layout(target);
+            }
+            
+            // Assert
+            Assert.True(target.Measured == 1, "should be measured only once");
+            Assert.True(target.Arranged == 1, "should be arranged only once");
+            
+            // the first 5 additional items will be reused when scrolling down, but the remaining 10 visible + 5 additional not touched at all
+            var expectedUntouchedItems =
+                items.Skip(5 /*additional items*/).Take(15).ToList(); 
+            foreach (var itm in expectedUntouchedItems)
+            {
+                Assert.True(itm.Measured == 0, $"{itm.Caption} should not be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 0, $"{itm.Caption} should not be arranged but was {itm.Arranged} times");
+            }
+
+            var newAdditionalItems = items.Skip(20).Take(5);
+            foreach (var itm in newAdditionalItems)
+            {
+                Assert.True(itm.Measured == 1, $"{itm.Caption} should be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 1, $"{itm.Caption} should be measured but was {itm.Arranged} times");
+            }
+        }
+        
+        [Fact]
+        public void Scrolling_Left_Does_Not_Measure_Or_Arrange_Until_Extended_ViewPort_Bounds_Are_Reached()
+        {
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithWidthAndMeasureArrangeCount(x)).ToList();
+            
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithWidthTemplate, orientation:Orientation.Horizontal);
+
+            // scroll a bit down so we are not near the start of the list
+            scroll.Offset = new Vector(200, 0);
+            Layout(target);
+            
+            Assert.True(target.FirstRealizedIndex == 15,
+                $"Should show items from 20 to 30 (so 15 to 35 including additional items) but first realized index was {target.FirstRealizedIndex}");
+
+            // reset counters
+            target.ResetMeasureArrangeCounters();
+            // shows 20 items, each is 10 high.
+            // visible are 10 => need to scroll down 100px until the next 5 (visible*BufferFactor) additional items are added.
+            // until then no measure-arrange call should happen
+
+            var initialFirstRealizedIndex = target.FirstRealizedIndex;
+            
+            // Scroll down until the extended viewport bounds are reached
+            while (target.FirstRealizedIndex >= 15)
+            {
+                scroll.Offset = new Vector(scroll.Offset.X - 5, 0);
+                Layout(target);
+            }
+            
+            // Assert
+            Assert.True(target.Measured == 1, "should be measured only once");
+            Assert.True(target.Arranged == 1, "should be arranged only once");
+            
+            // the last 5 additional items will be reused when scrolling up, but the remaining 10 visible + 5 additional not touched at all
+            var expectedUntouchedItems = items.Skip(initialFirstRealizedIndex+1).Take(15).ToList(); 
+            foreach (var itm in expectedUntouchedItems)
+            {
+                Assert.True(itm.Measured == 0, $"{itm.Caption} should not be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 0, $"{itm.Caption} should not be arranged but was {itm.Arranged} times");
+            }
+
+            // now that we scrolled up to index 19, items 18,17,16,15 and 14 should be the "additional" ones
+            var newAdditionalItems = items.Skip(initialFirstRealizedIndex - 6).Take(6);
+            foreach (var itm in newAdditionalItems)
+            {
+                Assert.True(itm.Measured == 1, $"{itm.Caption} should be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 1, $"{itm.Caption} should be measured but was {itm.Arranged} times");
+            }
+        }
+        
+        [Fact]
+        public void Scrolling_Right_To_End_Of_List_Only_Measures_Once_When_Last_Item_Is_Reached()
+        { 
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithWidthAndMeasureArrangeCount(x)).ToList();
+            
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithWidthTemplate, orientation:Orientation.Horizontal);
+
+            // scroll a bit down so we are near the end of the list
+            scroll.Offset = new Vector(800, 0); // so we render 75 to 95 with a buffer size of 5
+            Layout(target);
+            
+            Assert.True(target.LastRealizedIndex == 94,
+                $"Should show 20 items but last realized index was {target.LastRealizedIndex}");
+
+            // reset counters
+            target.ResetMeasureArrangeCounters();
+            // shows 20 items, each is 10 high.
+            // visible are 10 => need to scroll down 100px until the next 5 (visible*BufferFactor) additional items are added.
+            // until then no measure-arrange call should happen
+
+            var initialLastRealizedIndex = target.LastRealizedIndex;
+            
+            // Scroll down until we reached the very last item
+            while (target.LastRealizedIndex < 99)
+            {
+                scroll.Offset = new Vector( scroll.Offset.X + 5, 0);
+                Layout(target);
+            }
+            
+            // Assert
+            Assert.True(target.Measured == 1, "should be measured only once even though we are at the end of the list");
+            Assert.True(target.Arranged == 1, "should be arranged only once even though we are at the end of the list");
+            
+            // the first 5 additional items will be reused when scrolling down, but the remaining 10 visible + 5 additional not touched at all
+            var expectedUntouchedItems =
+                items.Skip(initialLastRealizedIndex + 1 - 15).Take(15).ToList(); 
+            foreach (var itm in expectedUntouchedItems)
+            {
+                Assert.True(itm.Measured == 0, $"{itm.Caption} should not be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 0, $"{itm.Caption} should not be arranged but was {itm.Arranged} times");
+            }
+
+            var newAdditionalItems = items.Skip(initialLastRealizedIndex + 1).Take(5);
+            foreach (var itm in newAdditionalItems)
+            {
+                Assert.True(itm.Measured == 1, $"{itm.Caption} should be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 1, $"{itm.Caption} should be measured but was {itm.Arranged} times");
+            }
+        }
+        
+        [Fact]
+        public void Scrolling_Left_To_Start_Of_List_Only_Measures_Once_When_First_Item_Is_Reached()
+        {
+            using var app = App();
+            
+            var items = Enumerable.Range(0, 100).Select(x => new ItemWithWidthAndMeasureArrangeCount(x)).ToList();
+            
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl,VirtualizingStackPanelCountingMeasureArrange>(items: items, itemTemplate: CanvasWithWidthTemplate, orientation:Orientation.Horizontal);
+
+            // scroll a bit down so we are not near the start of the list
+            scroll.Offset = new Vector(105, 0);
+            Layout(target);
+            
+            Assert.True(target.FirstRealizedIndex == 5,
+                $"Should show items from 10 to 20 (so 5 to 25 including additional items) but first realized index was {target.FirstRealizedIndex}");
+
+            // reset counters
+            target.ResetMeasureArrangeCounters();
+            // shows 20 items, each is 10 high.
+            // visible are 10 => need to scroll down 100px until the next 5 (visible*BufferFactor) additional items are added.
+            // until then no measure-arrange call should happen
+            
+            // Scroll down until the extended viewport bounds are reached
+            while (target.FirstRealizedIndex > 0)
+            {
+                scroll.Offset = new Vector(scroll.Offset.X - 5, 0);
+                Layout(target);
+            }
+            
+            // Assert
+            Assert.True(target.Measured == 1, "should be measured only once even though we are at the start of the list");
+            Assert.True(target.Arranged == 1, "should be arranged only once even though we are at the start of the list");
+            
+            // the last 5 additional items will be reused when scrolling up, but the remaining 10 visible + 5 additional not touched at all
+            var expectedMeasuredItems = items.Take(20).ToList(); 
+            foreach (var itm in expectedMeasuredItems)
+            {
+                Assert.True(itm.Measured == 1, $"{itm.Caption} should be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 1 , $"{itm.Caption} should be arranged but was {itm.Arranged} times");
+            }
+
+            // now that we scrolled up to index 19, items 18,17,16,15 and 14 should be the "additional" ones
+            var untouchedItems = items.Skip(20).ToList();
+            foreach (var itm in untouchedItems)
+            {
+                Assert.True(itm.Measured == 0, $"{itm.Caption} should not be measured but was {itm.Measured} times");
+                Assert.True(itm.Arranged == 0, $"{itm.Caption} should not be measured but was {itm.Arranged} times");
+            }
+        }
+        
         [Fact]
         public void Creates_Initial_Items()
         {
@@ -1897,28 +2217,29 @@ namespace Avalonia.Controls.UnitTests
         }
         
         [DebuggerDisplay("{DebuggerDisplay}")]
-        private class ItemWithHeightAndMeasureArrangeCount : NotifyingBase, ICountMeasureArrangeCalls
+        private class ItemWithHeightAndMeasureArrangeCount : ItemWithHeight, ICountMeasureArrangeCalls
         {
-            private double _height;
-
-            public ItemWithHeightAndMeasureArrangeCount(int index, double height = 10)
+            public ItemWithHeightAndMeasureArrangeCount(int index, double height = 10) : base(index, height)
             {
-                Caption = $"Item {index}";
-                Height = height;
-            }
-
-            public string Caption { get; set; }
-
-            public double Height
-            {
-                get => _height;
-                set => SetField(ref _height, value);
             }
 
             public int Measured { get; set; }
             public int Arranged { get; set; }
 
             private string DebuggerDisplay => $"{Caption} (height: {Height} m:{Measured} a: {Arranged})";
+        }
+        
+        [DebuggerDisplay("{DebuggerDisplay}")]
+        private class ItemWithWidthAndMeasureArrangeCount : ItemWithWidth, ICountMeasureArrangeCalls
+        {
+            public ItemWithWidthAndMeasureArrangeCount(int index, double width = 10) : base(index, width)
+            {
+            }
+
+            public int Measured { get; set; }
+            public int Arranged { get; set; }
+
+            private string DebuggerDisplay => $"{Caption} (width: {Width} m:{Measured} a: {Arranged})";
         }
         
         private class ResettingCollection : List<string>, INotifyCollectionChanged
@@ -1982,7 +2303,7 @@ namespace Avalonia.Controls.UnitTests
 
             protected internal override void MeasureElement(Control element, Size availableSize)
             {
-                if (element is ContentPresenter cp && cp.Content is ItemWithHeightAndMeasureArrangeCount itm)
+                if (element is ContentPresenter cp && cp.Content is ICountMeasureArrangeCalls itm)
                     itm.Measured++;
                 
                 base.MeasureElement(element, availableSize);
@@ -1990,7 +2311,7 @@ namespace Avalonia.Controls.UnitTests
 
             protected internal override void ArrangeElement(Control element, Rect rect)
             {
-                if (element is ContentPresenter cp && cp.Content is ItemWithHeightAndMeasureArrangeCount itm)
+                if (element is ContentPresenter cp && cp.Content is ICountMeasureArrangeCalls itm)
                     itm.Arranged++;
                 
                 base.ArrangeElement(element, rect);

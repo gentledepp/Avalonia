@@ -184,6 +184,16 @@ namespace Avalonia.Controls
         /// </summary>
         public int LastRealizedIndex => _realizedElements?.LastIndex ?? -1;
 
+        /// <summary>
+        /// Returns the viewport that contains any visible elements
+        /// </summary>
+        internal Rect ViewPort => _viewport;
+
+        /// <summary>
+        /// Returns the extended viewport that contains any visible elements and the additional elements for fast scrolling (viewport * BufferFactor * 2)
+        /// </summary>
+        internal Rect ExtendedViewPort => _extendedViewport;
+
         protected override Size MeasureOverride(Size availableSize)
         {
             var items = Items;
@@ -1013,14 +1023,14 @@ namespace Avalonia.Controls
                 Math.Min(Bounds.Height, _viewport.Bottom + bufferSize) : 
                 Math.Min(Bounds.Width, _viewport.Right + bufferSize);
 
-            // speciality:
+            // special case:
             // If we are at the start of the list, append 2 * BufferFactor additional items
             // If we are at the end of the list, prepend 2 * BufferFactor additional items
             // - this way we always maintain "2 * BufferFactor * element" items. 
             if (vertical)
             {
                 var spaceAbove = _viewport.Top - bufferSize;
-                var spaceBelow = Bounds.Height - _viewport.Bottom + bufferSize;
+                var spaceBelow = Bounds.Height - (_viewport.Bottom + bufferSize);
                 
                 if (spaceAbove < 0 && spaceBelow >= 0)
                     extendedViewportEnd = Math.Min(Bounds.Height, extendedViewportEnd + Math.Abs(spaceAbove));
@@ -1030,12 +1040,12 @@ namespace Avalonia.Controls
             else
             {
                 var spaceLeft = _viewport.Left - bufferSize;
-                var spaceRight = Bounds.Width - _viewport.Right + BufferFactor;
+                var spaceRight = Bounds.Width - (_viewport.Right + bufferSize);
                 
                 if (spaceLeft < 0 && spaceRight >= 0)
-                    extendedViewportEnd = Math.Min(Bounds.Width, extendedViewportEnd + Math.Abs(spaceRight));
+                    extendedViewportEnd = Math.Min(Bounds.Width, extendedViewportEnd + Math.Abs(spaceLeft));
                 if(spaceLeft >= 0 && spaceRight < 0)
-                    extendedViewportStart = Math.Max(0, extendedViewportStart - Math.Abs(spaceLeft));
+                    extendedViewportStart = Math.Max(0, extendedViewportStart - Math.Abs(spaceRight));
             }
 
             Rect extendedViewPort;
