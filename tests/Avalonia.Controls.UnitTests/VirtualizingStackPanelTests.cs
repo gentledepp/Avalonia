@@ -1152,7 +1152,8 @@ namespace Avalonia.Controls.UnitTests
         {
             using var app = App();
             var style = CreateIsVisibleBindingStyle();
-            var items = Enumerable.Range(0, 3).Select(x => new ItemWithIsVisible(x)).ToList();
+            var itemsList = Enumerable.Range(0, 3).Select(x => new ItemWithIsVisible(x)).ToList();
+            var items = new ObservableCollection<ItemWithIsVisible>(itemsList);
             var (target, scroll, itemsControl) = CreateTarget(items: items, styles: new[] { style });
             var container = target.ContainerFromIndex(2)!;
 
