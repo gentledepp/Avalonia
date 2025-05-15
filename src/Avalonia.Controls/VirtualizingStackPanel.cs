@@ -58,18 +58,6 @@ namespace Avalonia.Controls
         public static readonly StyledProperty<double> BufferFactorProperty =
             AvaloniaProperty.Register<VirtualizingStackPanel, double>(nameof(BufferFactor), 0.0, 
                 validate: v => v is >= 0 and <= 2);
-
-        /// <summary>
-        /// Gets or sets the factor to determine how much additional space to maintain above and below the viewport.
-        /// A value of 0.5 means half the viewport size will be buffered on each side (up-down or left-right)
-        /// This uses more memory as more UI elements are realized, but greatly reduces the number of Measure-Arrange
-        /// cycles which can cause heavy GC pressure depending on the complexity of the item layouts.
-        /// </summary>
-        public double BufferFactor
-        {
-            get => GetValue(BufferFactorProperty);
-            set => SetValue(BufferFactorProperty, value);
-        }
         
         private static readonly AttachedProperty<object?> RecycleKeyProperty =
             AvaloniaProperty.RegisterAttached<VirtualizingStackPanel, Control, object?>("RecycleKey");
@@ -92,10 +80,6 @@ namespace Avalonia.Controls
         private int _focusedIndex = -1;
         private Control? _realizingElement;
         private int _realizingIndex = -1;
-
-        /// <summary>
-        /// The factor to determine additional space to maintain above and below the viewport.
-        /// </summary>
         private double _bufferFactor; 
         
         private bool _hasReachedStart = false;
@@ -103,7 +87,6 @@ namespace Avalonia.Controls
         private bool _cacheElementMeasurements = false;
         private Size _previousSize;
         private readonly HashSet<Control> _unchangedElements = new();
-        private readonly bool _traceVirtualization = false;
 
         private Rect _extendedViewport;
 
@@ -119,7 +102,6 @@ namespace Avalonia.Controls
             _updateElementIndex = UpdateElementIndex;
 
             _bufferFactor = Math.Max(0, BufferFactor);
-            // Initialize extended viewport with empty rect
             _extendedViewport = new Rect();
             
             EffectiveViewportChanged += OnEffectiveViewportChanged;
@@ -172,6 +154,20 @@ namespace Avalonia.Controls
         {
             get => GetValue(AreVerticalSnapPointsRegularProperty);
             set => SetValue(AreVerticalSnapPointsRegularProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the BufferFactor.
+        /// </summary>
+        /// <remarks>The factor determines how much additional space to maintain above and below the viewport.
+        /// A value of 0.5 means half the viewport size will be buffered on each side (up-down or left-right)
+        /// This uses more memory as more UI elements are realized, but greatly reduces the number of Measure-Arrange
+        /// cycles which can cause heavy GC pressure depending on the complexity of the item layouts.
+        /// </remarks>
+        public double BufferFactor
+        {
+            get => GetValue(BufferFactorProperty);
+            set => SetValue(BufferFactorProperty, value);
         }
 
         /// <summary>
@@ -277,8 +273,6 @@ namespace Avalonia.Controls
                         // but not if it is an unchanged element
                         if(!_unchangedElements.Contains(e))
                             ArrangeElement(e, rect);
-                        else if (_traceVirtualization)
-                            Debug.WriteLine($"Skipped arranging {e.DataContext}");
                 
                         // Register as anchor candidate only if it's in the actual viewport (not just the extended one)
                         var elementBounds = orientation == Orientation.Horizontal ?
@@ -764,11 +758,6 @@ namespace Avalonia.Controls
                 else
                     _unchangedElements.Add(e);
                 
-                if (_traceVirtualization && existed && _cacheElementMeasurements)
-                {
-                    Debug.WriteLine($"Skipped measuring {items[index]}");
-                }
-
                 var sizeU = horizontal ? e.DesiredSize.Width : e.DesiredSize.Height;
                 var sizeV = horizontal ? e.DesiredSize.Height : e.DesiredSize.Width;
 
@@ -805,11 +794,6 @@ namespace Avalonia.Controls
                     MeasureElement(e, availableSize);
                 else
                     _unchangedElements.Add(e);
-
-                if (_traceVirtualization && existed && _cacheElementMeasurements)
-                {
-                    Debug.WriteLine($"Skipped measuring {items[index]}");
-                }
 
                 var sizeU = horizontal ? e.DesiredSize.Width : e.DesiredSize.Height;
                 var sizeV = horizontal ? e.DesiredSize.Height : e.DesiredSize.Width;
@@ -1074,8 +1058,7 @@ namespace Avalonia.Controls
 
             var needsMeasure = false;
             
-            if(_traceVirtualization) Debug.Write($"old xVP:{oldExtendedViewportStart}.-{oldExtendedViewportEnd} - new VP:{newViewportStart}-{newViewportEnd}");
-
+           
             // Case 1: Viewport has changed significantly
             if (!MathUtilities.AreClose(oldViewportStart, newViewportStart) ||
                 !MathUtilities.AreClose(oldViewportEnd, newViewportEnd))
@@ -1085,7 +1068,6 @@ namespace Avalonia.Controls
                     newViewportEnd > oldExtendedViewportEnd)
                 {
                     needsMeasure = true;
-                    if(_traceVirtualization) Debug.Write(" Case 1a");
                 }
                 // Case 1b: The extended viewport has changed significantly
                 else if (!MathUtilities.AreClose(oldExtendedViewportStart, newExtendedViewportStart) ||
@@ -1113,7 +1095,6 @@ namespace Avalonia.Controls
                             // Skip re-measuring since we're at the list start and it won't change the result.
                             // This prevents redundant Measure-Arrange cycles when at list beginning.
                             nearingEdge = !_hasReachedStart;
-                            if(_traceVirtualization) Debug.Write(" Case 1b UP");
                         }
                         
                         // If scrolling down/right and nearing the bottom/right edge of realized elements
@@ -1124,7 +1105,6 @@ namespace Avalonia.Controls
                             // Skip re-measuring since we're at the list end and it won't change the result.
                             // This prevents redundant Measure-Arrange cycles when at list beginning.
                             nearingEdge = !_hasReachedEnd;
-                            if(_traceVirtualization) Debug.Write(" Case 1b DOWN");
                         }
                     }
                     else
@@ -1138,7 +1118,6 @@ namespace Avalonia.Controls
 
             if (needsMeasure)
             {
-                if(_traceVirtualization) Debug.WriteLine(" => InvalidateMeasure");
                 
                 // only store the new "old" extended viewport if we _did_ actually measure
                 _extendedViewport = extendedViewPort;
@@ -1152,10 +1131,6 @@ namespace Avalonia.Controls
                 
                 _cacheElementMeasurements = !sizeChanged;
                 InvalidateMeasure();
-            }
-            else
-            {
-                if(_traceVirtualization) Debug.WriteLine("");
             }
         }
 
