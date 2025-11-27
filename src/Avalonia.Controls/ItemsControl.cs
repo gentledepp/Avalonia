@@ -798,6 +798,26 @@ namespace Avalonia.Controls
         }
 
         /// <summary>
+        /// Attempts to get a recycled content control from the automatic DataType-based pool.
+        /// Used for IRecyclingDataTemplate + ITypedDataTemplate combinations.
+        /// </summary>
+        /// <param name="dataType">The data type to get recycled content for.</param>
+        /// <returns>A recycled control if available, or null if no recycled control exists.</returns>
+        internal Control? GetRecycledContentForDataType(Type dataType)
+        {
+            if (_contentRecyclePool == null)
+                return null;
+
+            var poolKey = (DataTypeRecyclingMarker.Instance, (object)dataType);
+            if (_contentRecyclePool.TryGetValue(poolKey, out var stack) && stack.Count > 0)
+            {
+                return stack.Pop();
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Returns a content control to the recycle pool for later reuse.
         /// </summary>
         /// <param name="template">The virtualizing data template that created the control.</param>
@@ -823,6 +843,32 @@ namespace Avalonia.Controls
 
             // Enforce pool size limit
             var maxPoolSize = template.MaxPoolSizePerKey;
+            if (stack.Count < maxPoolSize)
+            {
+                stack.Push(content);
+            }
+            // else: let GC collect excess controls
+        }
+
+        /// <summary>
+        /// Returns a content control to the automatic DataType-based recycle pool.
+        /// Used for IRecyclingDataTemplate + ITypedDataTemplate combinations.
+        /// </summary>
+        /// <param name="dataType">The data type for the recycling pool.</param>
+        /// <param name="content">The control to recycle.</param>
+        internal void ReturnContentToPoolForDataType(Type dataType, Control content)
+        {
+            _contentRecyclePool ??= new();
+            var poolKey = (DataTypeRecyclingMarker.Instance, (object)dataType);
+
+            if (!_contentRecyclePool.TryGetValue(poolKey, out var stack))
+            {
+                stack = new Stack<Control>();
+                _contentRecyclePool[poolKey] = stack;
+            }
+
+            // Enforce pool size limit (default 5 for automatic recycling)
+            var maxPoolSize = DataTypeRecyclingMarker.Instance.MaxPoolSizePerKey;
             if (stack.Count < maxPoolSize)
             {
                 stack.Push(content);
@@ -967,6 +1013,26 @@ namespace Avalonia.Controls
             count = ItemsView.Count;
             return true;
         }
+    }
+
+    /// <summary>
+    /// Sentinel marker used as the template key for automatic DataType-based recycling.
+    /// This allows IRecyclingDataTemplate + ITypedDataTemplate to share the same pool infrastructure.
+    /// </summary>
+    internal sealed class DataTypeRecyclingMarker : IVirtualizingDataTemplate
+    {
+        private DataTypeRecyclingMarker() { }
+
+        /// <summary>
+        /// Singleton instance used as a marker in the pool dictionary.
+        /// </summary>
+        public static DataTypeRecyclingMarker Instance { get; } = new DataTypeRecyclingMarker();
+
+        public object? GetKey(object? data) => null;
+        public Control? Build(object? data, Control? existing) => null;
+        public Control? Build(object? data) => null;
+        public bool Match(object? data) => false;
+        public int MaxPoolSizePerKey => 5; // Default for automatic recycling
     }
 
     /// <summary>
