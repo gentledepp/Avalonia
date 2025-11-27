@@ -10,8 +10,6 @@ using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Metadata;
-using Avalonia.Platform;
-using Avalonia.Styling;
 using Avalonia.Utilities;
 
 namespace Avalonia.Controls.Presenters
@@ -177,6 +175,8 @@ namespace Avalonia.Controls.Presenters
         private Control? _child;
         private bool _createdChild;
         private IRecyclingDataTemplate? _recyclingDataTemplate;
+        private bool _deferUpdateChild;
+        private (bool IsSet, object? Value) _overrideDataContext;
         private readonly BorderRenderHelper _borderRenderer = new BorderRenderHelper();
 
         /// <summary>
@@ -420,6 +420,60 @@ namespace Avalonia.Controls.Presenters
         /// </summary>
         internal IContentPresenterHost? Host { get; private set; }
 
+        /// <summary>
+        /// Begins a batch update where multiple property changes won't trigger UpdateChild.
+        /// Call EndBatchUpdate to apply changes.
+        /// </summary>
+        internal void BeginBatchUpdate()
+        {
+            _deferUpdateChild = true;
+        }
+
+        /// <summary>
+        /// Ends a batch update and triggers UpdateChild to apply all property changes.
+        /// </summary>
+        internal void EndBatchUpdate()
+        {
+            _deferUpdateChild = false;
+            if (((ILogical)this).IsAttachedToLogicalTree)
+            {
+                UpdateChild();
+            }
+        }
+
+        /// <summary>
+        /// Sets the <see cref="Content"/> and <see cref="StyledElement.DataContext"/> properties atomically,
+        /// ensuring that the content's DataContext is never temporarily set to an incorrect value.
+        /// </summary>
+        /// <param name="content">The new content.</param>
+        /// <param name="dataContext">The DataContext to set on the presenter.</param>
+        /// <remarks>
+        /// When <see cref="Content"/> is set to a <see cref="Control"/>, the presenter normally
+        /// clears its <see cref="StyledElement.DataContext"/> to allow the content to inherit it. This method
+        /// overrides that behavior, setting the <see cref="StyledElement.DataContext"/> to the specified value
+        /// before updating the child, preventing any intermediate state where the content could
+        /// inherit an incorrect DataContext from higher up the tree.
+        /// </remarks>
+        internal void SetContentWithDataContext(object? content, object? dataContext)
+        {
+            _overrideDataContext = (true, dataContext);
+
+            try
+            {
+                SetCurrentValue(ContentProperty, content);
+            }
+            finally
+            {
+                // If Content didn't change, UpdateChild wasn't called and the
+                // override wasn't consumed. Apply the DataContext directly.
+                if (_overrideDataContext.IsSet)
+                {
+                    _overrideDataContext = default;
+                    DataContext = dataContext;
+                }
+            }
+        }
+
         /// <inheritdoc/>
         public sealed override void ApplyTemplate()
         {
@@ -592,6 +646,8 @@ namespace Avalonia.Controls.Presenters
                             : FuncDataTemplate.Default
                     );
 
+                // Use instance-based recycling (IRecyclingDataTemplate)
+                // Container-level virtualization handles pooling via VirtualizingStackPanel
                 if (dataTemplate is IRecyclingDataTemplate rdt)
                 {
                     var toRecycle = rdt == _recyclingDataTemplate ? oldChild : null;
@@ -704,6 +760,10 @@ namespace Avalonia.Controls.Presenters
         private void ContentChanged(AvaloniaPropertyChangedEventArgs e)
         {
             _createdChild = false;
+
+            // Don't update child if we're in batch update mode
+            if (_deferUpdateChild)
+                return;
 
             if (((ILogical)this).IsAttachedToLogicalTree)
             {
