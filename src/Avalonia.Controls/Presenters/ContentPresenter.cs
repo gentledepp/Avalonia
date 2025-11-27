@@ -13,6 +13,7 @@ using Avalonia.Metadata;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Utilities;
+using Avalonia.VisualTree;
 
 namespace Avalonia.Controls.Presenters
 {
@@ -171,6 +172,8 @@ namespace Avalonia.Controls.Presenters
         private Control? _child;
         private bool _createdChild;
         private IRecyclingDataTemplate? _recyclingDataTemplate;
+        private IVirtualizingDataTemplate? _virtualizingTemplate;
+        private object? _currentData;
         private readonly BorderRenderHelper _borderRenderer = new BorderRenderHelper();
 
         /// <summary>
@@ -454,6 +457,9 @@ namespace Avalonia.Controls.Presenters
         {
             var contentTemplate = ContentTemplate;
             var oldChild = Child;
+            var oldVirtualizingTemplate = _virtualizingTemplate;
+            var oldData = _currentData;
+
             var newChild = CreateChild(content, oldChild, contentTemplate);
             var logicalChildren = GetEffectiveLogicalChildren();
 
@@ -463,6 +469,13 @@ namespace Avalonia.Controls.Presenters
 
                 if (oldChild != null)
                 {
+                    // Return old content to pool if from virtualizing template
+                    if (oldVirtualizingTemplate != null)
+                    {
+                        _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
+                        _itemsControl?.ReturnContentToPool(oldVirtualizingTemplate, oldData, oldChild);
+                    }
+
                     VisualChildren.Remove(oldChild);
                     logicalChildren.Remove(oldChild);
                     ((ISetInheritanceParent)oldChild).SetParent(oldChild.Parent);
@@ -515,6 +528,7 @@ namespace Avalonia.Controls.Presenters
 
         private Thickness? _layoutThickness;
         private double _scale;
+        private ItemsControl? _itemsControl;
 
         private Thickness LayoutThickness
         {
@@ -577,21 +591,41 @@ namespace Avalonia.Controls.Presenters
                             : FuncDataTemplate.Default
                     );
 
-                if (dataTemplate is IRecyclingDataTemplate rdt)
+                // Check if template supports content virtualization
+                if (dataTemplate is IVirtualizingDataTemplate vdt &&
+                    ContentVirtualizationDiagnostics.IsEnabled)
+                {
+                    // Try to get recycled content from ItemsControl's pool
+                    _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
+                    var recycled = _itemsControl?.GetRecycledContent(vdt, content);
+
+                    newChild = vdt.Build(content, recycled);
+                    _virtualizingTemplate = vdt;
+                    _currentData = content;
+                    _recyclingDataTemplate = null;
+                }
+                // Fall back to existing recycling behavior
+                else if (dataTemplate is IRecyclingDataTemplate rdt)
                 {
                     var toRecycle = rdt == _recyclingDataTemplate ? oldChild : null;
                     newChild = rdt.Build(content, toRecycle);
                     _recyclingDataTemplate = rdt;
+                    _virtualizingTemplate = null;
+                    _currentData = null;
                 }
                 else
                 {
                     newChild = dataTemplate.Build(content);
                     _recyclingDataTemplate = null;
+                    _virtualizingTemplate = null;
+                    _currentData = null;
                 }
             }
             else
             {
                 _recyclingDataTemplate = null;
+                _virtualizingTemplate = null;
+                _currentData = null;
             }
 
             return newChild;
@@ -735,6 +769,13 @@ namespace Avalonia.Controls.Presenters
             {
                 DebugDisplayHelper.AppendOptionalValue(builder, nameof(Content), Content, true);
             }
+        }
+        
+        /// <inheritdoc/>
+        protected override void OnDetachedFromLogicalTree(LogicalTreeAttachmentEventArgs e)
+        {
+            base.OnDetachedFromLogicalTree(e);
+            _itemsControl = null;
         }
     }
 }

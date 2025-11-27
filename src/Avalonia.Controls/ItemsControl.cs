@@ -88,6 +88,11 @@ namespace Avalonia.Controls
         private IDataTemplate? _displayMemberItemTemplate;
         private ItemsPresenter? _itemsPresenter;
 
+        // Content recycling pool for virtualizing data templates
+        // Key: (IVirtualizingDataTemplate instance, recycle key from GetKey())
+        // Value: Stack of recycled content controls
+        internal Dictionary<(IVirtualizingDataTemplate, object), Stack<Control>>? _contentRecyclePool;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ItemsControl"/> class.
         /// </summary>
@@ -639,6 +644,13 @@ namespace Avalonia.Controls
             }
         }
 
+        /// <inheritdoc/>
+        protected override void OnDetachedFromLogicalTree(LogicalTreeAttachmentEventArgs e)
+        {
+            base.OnDetachedFromLogicalTree(e);
+            ClearContentRecyclePools();
+        }
+
         /// <summary>
         /// Refreshes the containers displayed by the control.
         /// </summary>
@@ -759,6 +771,72 @@ namespace Avalonia.Controls
         {
             ClearContainerForItemOverride(container);
             ContainerClearing?.Invoke(this, new(container));
+        }
+
+        /// <summary>
+        /// Attempts to get a recycled content control from the pool for the specified template and data.
+        /// </summary>
+        /// <param name="template">The virtualizing data template.</param>
+        /// <param name="data">The data object to display.</param>
+        /// <returns>A recycled control if available, or null if no recycled control exists.</returns>
+        internal Control? GetRecycledContent(IVirtualizingDataTemplate template, object? data)
+        {
+            if (_contentRecyclePool == null || data == null)
+                return null;
+
+            var recycleKey = template.GetKey(data);
+            if (recycleKey == null)
+                return null;
+
+            var poolKey = (template, recycleKey);
+            if (_contentRecyclePool.TryGetValue(poolKey, out var stack) && stack.Count > 0)
+            {
+                return stack.Pop();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Returns a content control to the recycle pool for later reuse.
+        /// </summary>
+        /// <param name="template">The virtualizing data template that created the control.</param>
+        /// <param name="data">The data object that was displayed.</param>
+        /// <param name="content">The control to recycle.</param>
+        internal void ReturnContentToPool(IVirtualizingDataTemplate template, object? data, Control content)
+        {
+            if (data == null)
+                return;
+
+            var recycleKey = template.GetKey(data);
+            if (recycleKey == null)
+                return;
+
+            _contentRecyclePool ??= new();
+            var poolKey = (template, recycleKey);
+
+            if (!_contentRecyclePool.TryGetValue(poolKey, out var stack))
+            {
+                stack = new Stack<Control>();
+                _contentRecyclePool[poolKey] = stack;
+            }
+
+            // Enforce pool size limit
+            var maxPoolSize = template.MaxPoolSizePerKey;
+            if (stack.Count < maxPoolSize)
+            {
+                stack.Push(content);
+            }
+            // else: let GC collect excess controls
+        }
+
+        /// <summary>
+        /// Clears all content recycle pools, releasing all recycled controls.
+        /// </summary>
+        internal void ClearContentRecyclePools()
+        {
+            _contentRecyclePool?.Clear();
+            _contentRecyclePool = null;
         }
 
         private void AddControlItemsToLogicalChildren(IEnumerable? items)
@@ -889,5 +967,81 @@ namespace Avalonia.Controls
             count = ItemsView.Count;
             return true;
         }
+    }
+
+    /// <summary>
+    /// Provides diagnostics for content virtualization.
+    /// </summary>
+    public static class ContentVirtualizationDiagnostics
+    {
+        /// <summary>
+        /// Gets or sets whether content virtualization is globally enabled.
+        /// Default is true. Set to false for debugging.
+        /// </summary>
+        public static bool IsEnabled { get; set; } = true;
+
+        /// <summary>
+        /// Gets pool statistics for the specified ItemsControl.
+        /// </summary>
+        /// <param name="control">The ItemsControl to get statistics for.</param>
+        /// <returns>Statistics about the content recycle pools, or null if no pools exist.</returns>
+        public static ContentPoolStats? GetPoolStats(ItemsControl control)
+        {
+            if (control._contentRecyclePool == null)
+                return null;
+
+            var stats = new ContentPoolStats();
+            foreach (var kvp in control._contentRecyclePool)
+            {
+                stats.PoolEntries.Add(new PoolEntry
+                {
+                    TemplateName = kvp.Key.Item1.GetType().Name,
+                    RecycleKey = kvp.Key.Item2,
+                    PooledCount = kvp.Value.Count
+                });
+            }
+            return stats;
+        }
+
+        /// <summary>
+        /// Clears all content recycle pools for the specified ItemsControl.
+        /// </summary>
+        /// <param name="control">The ItemsControl to clear pools for.</param>
+        public static void ClearPools(ItemsControl control)
+        {
+            control.ClearContentRecyclePools();
+        }
+    }
+
+    /// <summary>
+    /// Statistics about content recycle pools.
+    /// </summary>
+    public class ContentPoolStats
+    {
+        /// <summary>
+        /// Gets the pool entries.
+        /// </summary>
+        public List<PoolEntry> PoolEntries { get; } = new();
+    }
+
+    /// <summary>
+    /// Information about a single pool entry.
+    /// </summary>
+    public class PoolEntry
+    {
+        /// <summary>
+        /// Gets or sets the name of the template.
+        /// </summary>
+        public string TemplateName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the recycle key for this pool.
+        /// </summary>
+        public object RecycleKey { get; set; } = new();
+
+        /// <summary>
+        /// Gets or sets the number of controls currently pooled.
+        /// </summary>
+        public int PooledCount { get; set; }
     }
 }
