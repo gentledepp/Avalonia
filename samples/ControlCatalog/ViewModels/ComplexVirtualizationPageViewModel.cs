@@ -23,8 +23,18 @@ namespace ControlCatalog.ViewModels
                 switch (type)
                 {
                     case 0:
-                        var bioLength = random.Next(0, 4); // 0-3 sentences
+                        var bioLength = random.Next(0, 5); // 0-4 sentences
                         var bio = bioLength > 0 ? string.Join(" ", Enumerable.Range(0, bioLength).Select(_ => SampleText[random.Next(SampleText.Length)])) : "";
+                        var hasSkills = random.Next(2) == 0;
+                        var skillCount = hasSkills ? random.Next(2, 7) : 0;
+                        var skills = new List<string>();
+                        if (hasSkills)
+                        {
+                            for (int j = 0; j < skillCount; j++)
+                            {
+                                skills.Add(Skills[random.Next(Skills.Length)]);
+                            }
+                        }
                         items.Add(new PersonItem
                         {
                             Id = i,
@@ -33,12 +43,25 @@ namespace ControlCatalog.ViewModels
                             Department = Departments[random.Next(Departments.Length)],
                             Bio = bio,
                             PhoneNumber = $"+1 {random.Next(200, 999)}-{random.Next(100, 999)}-{random.Next(1000, 9999)}",
-                            YearsExperience = random.Next(0, 30)
+                            YearsExperience = random.Next(0, 30),
+                            Skills = skills,
+                            IsActive = random.Next(2) == 0,
+                            LastActivity = DateTime.Now.AddDays(-random.Next(0, 90))
                         });
                         break;
                     case 1:
-                        var descLength = random.Next(1, 4); // 1-3 sentences
+                        var descLength = random.Next(1, 6); // 1-5 sentences
                         var description = string.Join(" ", Enumerable.Range(0, descLength).Select(_ => SampleText[random.Next(SampleText.Length)]));
+                        var hasSubtasks = random.Next(3) == 0; // 33% chance
+                        var subtaskCount = hasSubtasks ? random.Next(2, 6) : 0;
+                        var subtasks = new List<string>();
+                        if (hasSubtasks)
+                        {
+                            for (int j = 0; j < subtaskCount; j++)
+                            {
+                                subtasks.Add($"{TaskActions[random.Next(TaskActions.Length)]} {TaskObjects[random.Next(TaskObjects.Length)]}");
+                            }
+                        }
                         items.Add(new TaskItem
                         {
                             Id = i,
@@ -47,17 +70,21 @@ namespace ControlCatalog.ViewModels
                             IsCompleted = random.Next(2) == 0,
                             Priority = (Priority)random.Next(3),
                             DueDate = DateTime.Now.AddDays(random.Next(-10, 30)),
-                            Assignee = $"{FirstNames[random.Next(FirstNames.Length)]} {LastNames[random.Next(LastNames.Length)]}"
+                            Assignee = $"{FirstNames[random.Next(FirstNames.Length)]} {LastNames[random.Next(LastNames.Length)]}",
+                            Subtasks = subtasks,
+                            ProgressPercentage = random.Next(0, 101)
                         });
                         break;
                     case 2:
-                        var tagCount = random.Next(1, 8); // 1-7 tags
+                        var tagCount = random.Next(1, 10); // 1-9 tags
                         var tags = new List<string>();
                         for (int j = 0; j < tagCount; j++)
                         {
                             var tag = AllTags[random.Next(AllTags.Length)];
                             if (!tags.Contains(tag)) tags.Add(tag);
                         }
+                        var hasDescription = random.Next(2) == 0; // 50% chance
+                        var productDesc = hasDescription ? string.Join(" ", Enumerable.Range(0, random.Next(1, 4)).Select(_ => SampleText[random.Next(SampleText.Length)])) : "";
                         items.Add(new ProductItem
                         {
                             Id = i,
@@ -66,12 +93,25 @@ namespace ControlCatalog.ViewModels
                             Tags = tags,
                             InStock = random.Next(2) == 0,
                             Rating = random.Next(1, 6),
-                            ReviewCount = random.Next(0, 5000)
+                            ReviewCount = random.Next(0, 5000),
+                            Description = productDesc,
+                            Category = ProductCategories[random.Next(ProductCategories.Length)],
+                            Discount = random.Next(4) == 0 ? random.Next(5, 50) : 0 // 25% chance of discount
                         });
                         break;
                     case 3:
-                        var captionLength = random.Next(0, 3); // 0-2 sentences
+                        var captionLength = random.Next(0, 5); // 0-4 sentences
                         var caption = captionLength > 0 ? string.Join(" ", Enumerable.Range(0, captionLength).Select(_ => SampleText[random.Next(SampleText.Length)])) : "";
+                        var hasComments = random.Next(3) == 0; // 33% chance
+                        var commentCount = hasComments ? random.Next(1, 5) : 0;
+                        var comments = new List<string>();
+                        if (hasComments)
+                        {
+                            for (int j = 0; j < commentCount; j++)
+                            {
+                                comments.Add($"{FirstNames[random.Next(FirstNames.Length)]}: {SampleText[random.Next(SampleText.Length)]}");
+                            }
+                        }
                         items.Add(new PhotoItem
                         {
                             Id = i,
@@ -80,7 +120,10 @@ namespace ControlCatalog.ViewModels
                             ImageUrl = $"avares://ControlCatalog/Assets/Icons/avalonia-32.png",
                             Caption = caption,
                             Likes = random.Next(0, 10000),
-                            DateTaken = DateTime.Now.AddDays(-random.Next(0, 1000))
+                            DateTaken = DateTime.Now.AddDays(-random.Next(0, 1000)),
+                            Comments = comments,
+                            CameraModel = random.Next(2) == 0 ? CameraModels[random.Next(CameraModels.Length)] : "",
+                            IsPublic = random.Next(2) == 0
                         });
                         break;
                 }
@@ -117,6 +160,9 @@ namespace ControlCatalog.ViewModels
             "Duis aute irure dolor in reprehenderit in voluptate velit.",
             "Excepteur sint occaecat cupidatat non proident sunt in culpa."
         };
+        private static readonly string[] Skills = { "C#", "Python", "JavaScript", "React", "Angular", "Vue", "Node.js", "Docker", "Kubernetes", "AWS", "Azure", "SQL", "MongoDB", "Git" };
+        private static readonly string[] ProductCategories = { "Electronics", "Clothing", "Books", "Home & Garden", "Sports", "Toys", "Food & Beverage" };
+        private static readonly string[] CameraModels = { "Canon EOS R5", "Nikon Z9", "Sony A7R V", "Fujifilm X-T5", "iPhone 14 Pro" };
     }
 
     public enum Priority
@@ -143,6 +189,9 @@ namespace ControlCatalog.ViewModels
         public string Bio { get; set; } = string.Empty;
         public string PhoneNumber { get; set; } = string.Empty;
         public int YearsExperience { get; set; }
+        public List<string> Skills { get; set; } = new();
+        public bool IsActive { get; set; }
+        public DateTime LastActivity { get; set; }
     }
 
     public class TaskItem : ViewModelBase
@@ -162,6 +211,8 @@ namespace ControlCatalog.ViewModels
         public Priority Priority { get; set; }
         public DateTime DueDate { get; set; }
         public string Assignee { get; set; } = string.Empty;
+        public List<string> Subtasks { get; set; } = new();
+        public int ProgressPercentage { get; set; }
     }
 
     public class ProductItem
@@ -173,6 +224,9 @@ namespace ControlCatalog.ViewModels
         public bool InStock { get; set; }
         public int Rating { get; set; }
         public int ReviewCount { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public int Discount { get; set; }
     }
 
     public class PhotoItem
@@ -184,5 +238,8 @@ namespace ControlCatalog.ViewModels
         public string Caption { get; set; } = string.Empty;
         public int Likes { get; set; }
         public DateTime DateTaken { get; set; }
+        public List<string> Comments { get; set; } = new();
+        public string CameraModel { get; set; } = string.Empty;
+        public bool IsPublic { get; set; }
     }
 }

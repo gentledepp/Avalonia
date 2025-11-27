@@ -20,6 +20,9 @@ namespace ControlCatalog.Pages
             _viewModel = new ComplexVirtualizationPageViewModel();
             DataContext = _viewModel;
 
+            // Set initial virtualization state
+            ContentVirtualizationDiagnostics.IsEnabled = _viewModel.EnableVirtualization;
+
             // Listen to EnableVirtualization changes
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 

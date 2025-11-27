@@ -64,7 +64,7 @@
                            VerticalAlignment="Center"/>
               </DockPanel>
 
-              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:" FontWeight="Bold" Margin="0,0,12,6"/>
                 <TextBox Grid.Row="0" Grid.Column="1"
                          Text="{Binding Name}"
@@ -97,13 +97,52 @@
                              FontWeight="Bold"/>
                 </Border>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="Bio:" FontWeight="Bold" Margin="0,0,12,0" VerticalAlignment="Top"/>
-                <TextBlock Grid.Row="4" Grid.Column="1"
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Status:" FontWeight="Bold" Margin="0,0,12,6"/>
+                <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,6">
+                  <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0">
+                    <Ellipse.Fill>
+                      <SolidColorBrush Color="{Binding IsActive, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                    </Ellipse.Fill>
+                  </Ellipse>
+                  <TextBlock Text="{Binding LastActivity, StringFormat='Last seen: {0:MMM dd}'}" FontSize="11"/>
+                </StackPanel>
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Bio:" FontWeight="Bold" Margin="0,0,12,0" VerticalAlignment="Top"
+                           IsVisible="{Binding Bio, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <TextBlock Grid.Row="5" Grid.Column="1"
                            Text="{Binding Bio}"
                            TextWrapping="Wrap"
                            FontStyle="Italic"
-                           Opacity="0.8"/>
+                           Opacity="0.8"
+                           IsVisible="{Binding Bio, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
               </Grid>
+
+              <!-- Skills section - only shown if Skills list has items -->
+              <StackPanel IsVisible="{Binding Skills.Count}" Margin="0,12,0,0">
+                <TextBlock Text="Skills:" FontWeight="Bold" FontSize="11" Margin="0,0,0,6"/>
+                <ItemsControl ItemsSource="{Binding Skills}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel/>
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Background="#2196F3"
+                              BorderBrush="#1976D2"
+                              BorderThickness="1"
+                              CornerRadius="3"
+                              Padding="6,3"
+                              Margin="2">
+                        <TextBlock Text="{Binding}"
+                                   Foreground="White"
+                                   FontSize="10"
+                                   FontWeight="Bold"/>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
             </StackPanel>
           </Border>
         </DataTemplate>
@@ -146,7 +185,7 @@
                          Opacity="0.8"
                          LineHeight="20"/>
 
-              <DockPanel>
+              <DockPanel Margin="0,0,0,8">
                 <Border BorderBrush="#4CAF50"
                         BorderThickness="2"
                         CornerRadius="3"
@@ -170,6 +209,38 @@
                              FontWeight="Bold"/>
                 </Border>
               </DockPanel>
+
+              <!-- Progress bar -->
+              <StackPanel Margin="0,0,0,8">
+                <DockPanel Margin="0,0,0,4">
+                  <TextBlock Text="Progress:" FontSize="11" DockPanel.Dock="Left" Margin="0,0,8,0"/>
+                  <TextBlock Text="{Binding ProgressPercentage, StringFormat='{}{0}%'}"
+                             FontSize="11"
+                             FontWeight="Bold"
+                             Foreground="#4CAF50"
+                             HorizontalAlignment="Right"/>
+                </DockPanel>
+                <Border BorderBrush="#4CAF50" BorderThickness="1" CornerRadius="2" Height="8">
+                  <Border Background="#4CAF50"
+                          HorizontalAlignment="Left"
+                          Width="{Binding ProgressPercentage, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                </Border>
+              </StackPanel>
+
+              <!-- Subtasks section - only shown if Subtasks list has items -->
+              <StackPanel IsVisible="{Binding Subtasks.Count}" Margin="0,0,0,0">
+                <TextBlock Text="Subtasks:" FontWeight="Bold" FontSize="11" Margin="0,0,0,6"/>
+                <ItemsControl ItemsSource="{Binding Subtasks}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Orientation="Horizontal" Margin="0,2">
+                        <TextBlock Text="• " Foreground="#4CAF50" FontWeight="Bold" Margin="0,0,4,0"/>
+                        <TextBlock Text="{Binding}" FontSize="11" Opacity="0.8"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
             </StackPanel>
           </Border>
         </DataTemplate>
@@ -205,17 +276,43 @@
               </DockPanel>
 
               <DockPanel Margin="0,0,0,8">
-                <TextBlock Text="{Binding ProductName}"
-                           FontWeight="Bold"
-                           FontSize="15"
-                           DockPanel.Dock="Left"
-                           VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding Price, StringFormat='${0:F2}'}"
-                           FontWeight="Bold"
-                           FontSize="18"
-                           Foreground="#FF9800"
-                           HorizontalAlignment="Right"/>
+                <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding ProductName}"
+                             FontWeight="Bold"
+                             FontSize="15"
+                             Margin="0,0,0,4"/>
+                  <TextBlock Text="{Binding Category}"
+                             FontSize="10"
+                             Opacity="0.7"
+                             FontStyle="Italic"/>
+                </StackPanel>
+                <StackPanel HorizontalAlignment="Right">
+                  <TextBlock Text="{Binding Price, StringFormat='${0:F2}'}"
+                             FontWeight="Bold"
+                             FontSize="18"
+                             Foreground="#FF9800"
+                             HorizontalAlignment="Right"/>
+                  <Border Background="#E53935"
+                          CornerRadius="2"
+                          Padding="4,2"
+                          HorizontalAlignment="Right"
+                          Margin="0,2,0,0"
+                          IsVisible="{Binding Discount}">
+                    <TextBlock Text="{Binding Discount, StringFormat='-{0}% OFF'}"
+                               FontSize="10"
+                               Foreground="White"
+                               FontWeight="Bold"/>
+                  </Border>
+                </StackPanel>
               </DockPanel>
+
+              <TextBlock Text="{Binding Description}"
+                         TextWrapping="Wrap"
+                         Margin="0,0,0,8"
+                         FontSize="12"
+                         Opacity="0.8"
+                         LineHeight="18"
+                         IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 
               <Border BorderBrush="#FF9800"
                       BorderThickness="2"
@@ -309,21 +406,59 @@
 
                 <TextBlock Text="{Binding Caption}"
                            TextWrapping="Wrap"
-                           Margin="0,0,0,6"
+                           Margin="0,0,0,8"
                            Opacity="0.8"
                            FontSize="12"
-                           LineHeight="18"/>
+                           LineHeight="18"
+                           IsVisible="{Binding Caption, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 
-                <Border BorderBrush="#9C27B0"
-                        BorderThickness="2"
-                        CornerRadius="3"
-                        Padding="6,3"
-                        HorizontalAlignment="Left">
-                  <TextBlock Text="{Binding DateTaken, StringFormat='Taken: {0:MMM dd, yyyy}'}"
-                             FontSize="10"
-                             Foreground="#9C27B0"
-                             FontWeight="Bold"/>
-                </Border>
+                <DockPanel Margin="0,0,0,8">
+                  <Border BorderBrush="#9C27B0"
+                          BorderThickness="2"
+                          CornerRadius="3"
+                          Padding="6,3"
+                          DockPanel.Dock="Left"
+                          Margin="0,0,6,0">
+                    <TextBlock Text="{Binding DateTaken, StringFormat='Taken: {0:MMM dd, yyyy}'}"
+                               FontSize="10"
+                               Foreground="#9C27B0"
+                               FontWeight="Bold"/>
+                  </Border>
+                  <Border Background="{DynamicResource SystemAccentColor}"
+                          CornerRadius="3"
+                          Padding="6,3"
+                          IsVisible="{Binding IsPublic}">
+                    <TextBlock Text="Public"
+                               FontSize="10"
+                               Foreground="White"
+                               FontWeight="Bold"/>
+                  </Border>
+                </DockPanel>
+
+                <TextBlock Text="{Binding CameraModel}"
+                           FontSize="11"
+                           FontFamily="Consolas,monospace"
+                           Margin="0,0,0,8"
+                           Opacity="0.7"
+                           IsVisible="{Binding CameraModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                <!-- Comments section - only shown if Comments list has items -->
+                <StackPanel IsVisible="{Binding Comments.Count}">
+                  <TextBlock Text="Comments:" FontWeight="Bold" FontSize="11" Margin="0,0,0,6"/>
+                  <Border BorderBrush="#9C27B0" BorderThickness="1" CornerRadius="3" Padding="8">
+                    <ItemsControl ItemsSource="{Binding Comments}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding}"
+                                     FontSize="11"
+                                     Opacity="0.8"
+                                     Margin="0,2"
+                                     TextWrapping="Wrap"/>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Border>
+                </StackPanel>
               </StackPanel>
             </Grid>
           </Border>
