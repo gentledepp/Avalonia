@@ -397,24 +397,36 @@ namespace Avalonia.Controls
             else if (container is ContentControl cc)
             {
                 // Prepare recycled content from pool BEFORE setting properties
-                // This allows ContentPresenter to use pre-fetched recycled content
+                // Use batch update to avoid multiple UpdateChild calls
                 if (cc.Presenter != null)
                 {
                     cc.Presenter.PrepareRecycledContent(item, itemTemplate);
+                    cc.Presenter.BeginBatchUpdate();
                 }
 
                 SetIfUnset(cc, ContentControl.ContentProperty, item);
                 if (itemTemplate is not null)
                     SetIfUnset(cc, ContentControl.ContentTemplateProperty, itemTemplate);
+
+                // End batch update - triggers single UpdateChild with both properties set
+                if (cc.Presenter != null)
+                {
+                    cc.Presenter.EndBatchUpdate();
+                }
             }
             else if (container is ContentPresenter p)
             {
                 // Prepare recycled content from pool BEFORE setting properties
+                // Use batch update to avoid multiple UpdateChild calls
                 p.PrepareRecycledContent(item, itemTemplate);
+                p.BeginBatchUpdate();
 
                 SetIfUnset(p, ContentPresenter.ContentProperty, item);
                 if (itemTemplate is not null)
                     SetIfUnset(p, ContentPresenter.ContentTemplateProperty, itemTemplate);
+
+                // End batch update - triggers single UpdateChild with both properties set
+                p.EndBatchUpdate();
             }
             else if (container is ItemsControl ic)
             {

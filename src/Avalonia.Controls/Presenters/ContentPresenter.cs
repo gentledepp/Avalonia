@@ -176,6 +176,7 @@ namespace Avalonia.Controls.Presenters
         private object? _currentData;
         private Type? _autoRecyclingDataType;
         private Control? _recycledContentToUse;
+        private bool _deferUpdateChild;
         private readonly BorderRenderHelper _borderRenderer = new BorderRenderHelper();
 
         /// <summary>
@@ -467,6 +468,27 @@ namespace Avalonia.Controls.Presenters
             else
             {
                 _recycledContentToUse = null;
+            }
+        }
+
+        /// <summary>
+        /// Begins a batch update where multiple property changes won't trigger UpdateChild.
+        /// Call EndBatchUpdate to apply changes.
+        /// </summary>
+        internal void BeginBatchUpdate()
+        {
+            _deferUpdateChild = true;
+        }
+
+        /// <summary>
+        /// Ends a batch update and triggers UpdateChild to apply all property changes.
+        /// </summary>
+        internal void EndBatchUpdate()
+        {
+            _deferUpdateChild = false;
+            if (((ILogical)this).IsAttachedToLogicalTree)
+            {
+                UpdateChild();
             }
         }
 
@@ -802,6 +824,10 @@ namespace Avalonia.Controls.Presenters
         private void ContentChanged(AvaloniaPropertyChangedEventArgs e)
         {
             _createdChild = false;
+
+            // Don't update child if we're in batch update mode
+            if (_deferUpdateChild)
+                return;
 
             if (((ILogical)this).IsAttachedToLogicalTree)
             {
