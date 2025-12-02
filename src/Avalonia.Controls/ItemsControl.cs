@@ -470,11 +470,26 @@ namespace Avalonia.Controls
             }
             else if (container is ContentControl cc)
             {
+                // Return content to virtualization pool BEFORE clearing properties
+                // This ensures ContentPresenter has access to correct data/template when pooling
+                if(cc.Presenter != null)
+                {
+                    var item = cc.Content;
+                    var template = cc.ContentTemplate;
+                    cc.Presenter.ReturnContentToVirtualizationPool(item, template);
+                }
+
                 cc.ClearValue(ContentControl.ContentProperty);
                 cc.ClearValue(ContentControl.ContentTemplateProperty);
             }
             else if (container is ContentPresenter p)
             {
+                // Return content to virtualization pool BEFORE clearing properties
+                // This ensures ContentPresenter has access to correct data/template when pooling
+                var item = p.Content;
+                var template = p.ContentTemplate;
+                p.ReturnContentToVirtualizationPool(item, template);
+
                 p.ClearValue(ContentPresenter.ContentProperty);
                 p.ClearValue(ContentPresenter.ContentTemplateProperty);
             }

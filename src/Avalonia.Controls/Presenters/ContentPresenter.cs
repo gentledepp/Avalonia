@@ -409,6 +409,32 @@ namespace Avalonia.Controls.Presenters
         /// </summary>
         internal IContentPresenterHost? Host { get; private set; }
 
+        /// <summary>
+        /// Returns the current content to the virtualization pool if applicable.
+        /// Called before the ContentPresenter is cleared during container recycling.
+        /// </summary>
+        /// <param name="item">The data item being displayed.</param>
+        /// <param name="template">The data template being used.</param>
+        internal void ReturnContentToVirtualizationPool(object? item, IDataTemplate? template)
+        {
+            if (Child == null || item == null || template == null) return;
+
+            _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
+
+            // Return to pool if from virtualizing template
+            if (template is IVirtualizingDataTemplate vdt)
+            {
+                _itemsControl?.ReturnContentToPool(vdt, item, Child);
+                System.Diagnostics.Debug.WriteLine($"###VIRT### - ReturnToVirtualizationPool (explicit): {item} - {Child}");
+            }
+            // Return to automatic DataType pool
+            else if (template is IRecyclingDataTemplate && template is ITypedDataTemplate tdt && tdt.DataType != null)
+            {
+                _itemsControl?.ReturnContentToPoolForDataType(tdt.DataType, Child);
+                System.Diagnostics.Debug.WriteLine($"###VIRT### - ReturnToVirtualizationPool (auto): datatype {tdt.DataType.FullName} - {Child}");
+            }
+        }
+
         /// <inheritdoc/>
         public sealed override void ApplyTemplate()
         {
@@ -468,23 +494,11 @@ namespace Avalonia.Controls.Presenters
             // Remove the old child if we're not recycling it.
             if (newChild != oldChild)
             {
-
                 if (oldChild != null)
                 {
-                    _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
-
-                    // Return old content to pool if from virtualizing template
-                    if (oldVirtualizingTemplate != null)
-                    {
-                        _itemsControl?.ReturnContentToPool(oldVirtualizingTemplate, oldData, oldChild);
-                        System.Diagnostics.Debug.WriteLine($"###VIRT### - Return to pool: {(oldData is null ? "<null>" : oldData)} - {oldChild}");
-                    }
-                    // Return old content to automatic DataType pool
-                    else if (oldAutoRecyclingDataType != null)
-                    {
-                        _itemsControl?.ReturnContentToPoolForDataType(oldAutoRecyclingDataType, oldChild);
-                        System.Diagnostics.Debug.WriteLine($"###VIRT### - Return to pool for datatype {oldAutoRecyclingDataType.FullName}: {(oldData is null ? "<null>" : oldData)} - {oldChild}");
-                    }
+                    // Pool return is now handled by ReturnContentToVirtualizationPool()
+                    // called from ItemsControl.ClearContainerForItemOverride() BEFORE properties are cleared.
+                    // This avoids the two-phase property update problem.
 
                     VisualChildren.Remove(oldChild);
                     logicalChildren.Remove(oldChild);
@@ -630,7 +644,7 @@ namespace Avalonia.Controls.Presenters
                     System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild virtualized (datatype {tdt.DataType?.FullName} for {(content is null ? "<null>" : content)} was {(recycled == newChild?"success":"FAILED")}");
                     _recyclingDataTemplate = rdt;
                     _autoRecyclingDataType = tdt.DataType;
-                    _virtualizingTemplate = null;
+                    // _virtualizingTemplate = null;
                     _currentData = null;
                 }
                 // Fall back to existing recycling behavior
@@ -640,7 +654,7 @@ namespace Avalonia.Controls.Presenters
                     newChild = rdt2.Build(content, toRecycle);
                     System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild recycled for {(content is null ? "<null>" : content)} was {(toRecycle == newChild?"success":"FAILED")}");
                     _recyclingDataTemplate = rdt2;
-                    _virtualizingTemplate = null;
+                    // _virtualizingTemplate = null;
                     _currentData = null;
                     _autoRecyclingDataType = null;
                 }
@@ -649,17 +663,17 @@ namespace Avalonia.Controls.Presenters
                     newChild = dataTemplate.Build(content);
                     System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild new for {(content is null ? "<null>" : content)}");
                     _recyclingDataTemplate = null;
-                    _virtualizingTemplate = null;
+                    // _virtualizingTemplate = null;
                     _currentData = null;
                     _autoRecyclingDataType = null;
                 }
             }
             else
             {
-                _recyclingDataTemplate = null;
-                _virtualizingTemplate = null;
-                _currentData = null;
-                _autoRecyclingDataType = null;
+                // _recyclingDataTemplate = null;
+                // _virtualizingTemplate = null;
+                // _currentData = null;
+                // _autoRecyclingDataType = null;
             }
 
             return newChild;
