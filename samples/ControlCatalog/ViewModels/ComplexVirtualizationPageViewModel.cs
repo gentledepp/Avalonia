@@ -18,8 +18,15 @@ namespace ControlCatalog.ViewModels
 
             for (int i = 0; i < 5000; i++)
             {
-                // Distribute items across 4 types
-                var type = i % 4;
+                // Randomly distribute items across 4 types (weighted distribution)
+                // This creates a more realistic scenario where types aren't evenly distributed
+                var type = random.Next(100) switch
+                {
+                    < 30 => 0,  // 30% PersonItem
+                    < 55 => 1,  // 25% TaskItem
+                    < 80 => 2,  // 25% ProductItem
+                    _ => 3      // 20% PhotoItem
+                };
                 switch (type)
                 {
                     case 0:
