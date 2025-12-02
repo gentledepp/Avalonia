@@ -427,14 +427,19 @@ namespace Avalonia.Controls.Presenters
             // Return to pool if from virtualizing template
             if (template is IVirtualizingDataTemplate vdt)
             {
+                // Check if template actually wants virtualization (GetKey returns null if EnableVirtualization=false)
+                var key = vdt.GetKey(item);
+                if (key == null)
+                    return;
+
                 _itemsControl?.ReturnContentToPool(vdt, item, Child);
-                System.Diagnostics.Debug.WriteLine($"###VIRT### - ReturnToVirtualizationPool (explicit): {item} - {Child}");
+                System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - ReturnToVirtualizationPool (explicit): {item} - {Child}");
             }
             // Return to automatic DataType pool
             else if (template is IRecyclingDataTemplate && template is ITypedDataTemplate tdt && tdt.DataType != null)
             {
                 _itemsControl?.ReturnContentToPoolForDataType(tdt.DataType, Child);
-                System.Diagnostics.Debug.WriteLine($"###VIRT### - ReturnToVirtualizationPool (auto): datatype {tdt.DataType.FullName} - {Child}");
+                System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - ReturnToVirtualizationPool (auto): datatype {tdt.DataType.FullName} - {Child}");
             }
         }
 
@@ -463,14 +468,22 @@ namespace Avalonia.Controls.Presenters
             // Get recycled content from pool if virtualizing template
             if (template is IVirtualizingDataTemplate vdt)
             {
+                // Check if template actually wants virtualization (GetKey returns null if EnableVirtualization=false)
+                var key = vdt.GetKey(item);
+                if (key == null)
+                {
+                    _recycledContentToUse = null;
+                    return;
+                }
+
                 _recycledContentToUse = _itemsControl?.GetRecycledContent(vdt, item);
-                System.Diagnostics.Debug.WriteLine($"###VIRT### - PrepareRecycledContent (explicit): {item} - got {(_recycledContentToUse != null ? _recycledContentToUse.ToString() : "null")}");
+                System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - PrepareRecycledContent (explicit): {item} - got {(_recycledContentToUse != null ? _recycledContentToUse.ToString() : "null")}");
             }
             // Get from automatic DataType pool
             else if (template is IRecyclingDataTemplate && template is ITypedDataTemplate tdt && tdt.DataType != null)
             {
                 _recycledContentToUse = _itemsControl?.GetRecycledContentForDataType(tdt.DataType);
-                System.Diagnostics.Debug.WriteLine($"###VIRT### - PrepareRecycledContent (auto): datatype {tdt.DataType.FullName} - got {(_recycledContentToUse != null ? _recycledContentToUse.ToString() : "null")}");
+                System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - PrepareRecycledContent (auto): datatype {tdt.DataType.FullName} - got {(_recycledContentToUse != null ? _recycledContentToUse.ToString() : "null")}");
             }
             else
             {
@@ -691,7 +704,7 @@ namespace Avalonia.Controls.Presenters
                     if (dataTemplate is IVirtualizingDataTemplate vdt)
                     {
                         newChild = vdt.Build(content, recycled);
-                        System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild virtualized (explicit) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
+                        System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild virtualized (explicit) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
                         _virtualizingTemplate = vdt;
                         _currentData = content;
                         _recyclingDataTemplate = null;
@@ -700,7 +713,7 @@ namespace Avalonia.Controls.Presenters
                     else if (dataTemplate is IRecyclingDataTemplate rdt && dataTemplate is ITypedDataTemplate tdt)
                     {
                         newChild = rdt.Build(content, recycled);
-                        System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild virtualized (auto) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
+                        System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild virtualized (auto) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
                         _recyclingDataTemplate = rdt;
                         _autoRecyclingDataType = tdt.DataType;
                         _virtualizingTemplate = null;
@@ -712,7 +725,7 @@ namespace Avalonia.Controls.Presenters
                 {
                     var toRecycle = rdt2 == _recyclingDataTemplate ? oldChild : null;
                     newChild = rdt2.Build(content, toRecycle);
-                    System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild recycled (instance) for {(content is null ? "<null>" : content)} was {(toRecycle == newChild ? "success" : "FAILED")}");
+                    System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild recycled (instance) for {(content is null ? "<null>" : content)} was {(toRecycle == newChild ? "success" : "FAILED")}");
                     _recyclingDataTemplate = rdt2;
                     _virtualizingTemplate = null;
                     _currentData = null;
@@ -721,7 +734,7 @@ namespace Avalonia.Controls.Presenters
                 else
                 {
                     newChild = dataTemplate.Build(content);
-                    System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild new for {(content is null ? "<null>" : content)}");
+                    System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild new for {(content is null ? "<null>" : content)}");
                     _recyclingDataTemplate = null;
                     _virtualizingTemplate = null;
                     _currentData = null;

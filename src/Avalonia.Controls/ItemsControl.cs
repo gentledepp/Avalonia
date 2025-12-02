@@ -397,8 +397,14 @@ namespace Avalonia.Controls
             else if (container is ContentControl cc)
             {
                 // Find the actual template that will be used (handles DataTemplates collection)
-                // If ItemTemplate is set, use it directly. Otherwise, search DataTemplates collection.
-                var actualTemplate = itemTemplate ?? container.FindDataTemplate(item, null);
+                // Use this ItemsControl's effective template first (respects ItemTemplate property)
+                var actualTemplate = itemTemplate;
+
+                // Only if no ItemTemplate is set, search up the tree for DataTemplates
+                if (actualTemplate == null)
+                {
+                    actualTemplate = container.FindDataTemplate(item, null);
+                }
 
                 // Prepare recycled content from pool BEFORE setting properties
                 // Pass the resolved template to avoid duplicate FindDataTemplate in CreateChild
@@ -423,8 +429,14 @@ namespace Avalonia.Controls
             else if (container is ContentPresenter p)
             {
                 // Find the actual template that will be used (handles DataTemplates collection)
-                // If ItemTemplate is set, use it directly. Otherwise, search DataTemplates collection.
-                var actualTemplate = itemTemplate ?? container.FindDataTemplate(item, null);
+                // Use this ItemsControl's effective template first (respects ItemTemplate property)
+                var actualTemplate = itemTemplate;
+
+                // Only if no ItemTemplate is set, search up the tree for DataTemplates
+                if (actualTemplate == null)
+                {
+                    actualTemplate = container.FindDataTemplate(item, null);
+                }
 
                 // Prepare recycled content from pool BEFORE setting properties
                 // Pass the resolved template to avoid duplicate FindDataTemplate in CreateChild
@@ -1094,6 +1106,8 @@ namespace Avalonia.Controls
         /// Default is true. Set to false for debugging.
         /// </summary>
         public static bool IsEnabled { get; set; } = true;
+
+        public static bool IsTracingEnabled { get; set; } = false;
 
         /// <summary>
         /// Gets pool statistics for the specified ItemsControl.
