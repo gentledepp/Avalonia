@@ -396,12 +396,22 @@ namespace Avalonia.Controls
             }
             else if (container is ContentControl cc)
             {
+                // Prepare recycled content from pool BEFORE setting properties
+                // This allows ContentPresenter to use pre-fetched recycled content
+                if (cc.Presenter != null)
+                {
+                    cc.Presenter.PrepareRecycledContent(item, itemTemplate);
+                }
+
                 SetIfUnset(cc, ContentControl.ContentProperty, item);
                 if (itemTemplate is not null)
                     SetIfUnset(cc, ContentControl.ContentTemplateProperty, itemTemplate);
             }
             else if (container is ContentPresenter p)
             {
+                // Prepare recycled content from pool BEFORE setting properties
+                p.PrepareRecycledContent(item, itemTemplate);
+
                 SetIfUnset(p, ContentPresenter.ContentProperty, item);
                 if (itemTemplate is not null)
                     SetIfUnset(p, ContentPresenter.ContentTemplateProperty, itemTemplate);

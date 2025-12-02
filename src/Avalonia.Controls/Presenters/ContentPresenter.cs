@@ -175,6 +175,7 @@ namespace Avalonia.Controls.Presenters
         private IVirtualizingDataTemplate? _virtualizingTemplate;
         private object? _currentData;
         private Type? _autoRecyclingDataType;
+        private Control? _recycledContentToUse;
         private readonly BorderRenderHelper _borderRenderer = new BorderRenderHelper();
 
         /// <summary>
@@ -435,6 +436,40 @@ namespace Avalonia.Controls.Presenters
             }
         }
 
+        /// <summary>
+        /// Prepares recycled content from the virtualization pool if applicable.
+        /// Called before the ContentPresenter is set with new content during container preparation.
+        /// </summary>
+        /// <param name="item">The data item to be displayed.</param>
+        /// <param name="template">The data template to be used.</param>
+        internal void PrepareRecycledContent(object? item, IDataTemplate? template)
+        {
+            if (item == null || template == null)
+            {
+                _recycledContentToUse = null;
+                return;
+            }
+
+            _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
+
+            // Get recycled content from pool if virtualizing template
+            if (template is IVirtualizingDataTemplate vdt)
+            {
+                _recycledContentToUse = _itemsControl?.GetRecycledContent(vdt, item);
+                System.Diagnostics.Debug.WriteLine($"###VIRT### - PrepareRecycledContent (explicit): {item} - got {(_recycledContentToUse != null ? _recycledContentToUse.ToString() : "null")}");
+            }
+            // Get from automatic DataType pool
+            else if (template is IRecyclingDataTemplate && template is ITypedDataTemplate tdt && tdt.DataType != null)
+            {
+                _recycledContentToUse = _itemsControl?.GetRecycledContentForDataType(tdt.DataType);
+                System.Diagnostics.Debug.WriteLine($"###VIRT### - PrepareRecycledContent (auto): datatype {tdt.DataType.FullName} - got {(_recycledContentToUse != null ? _recycledContentToUse.ToString() : "null")}");
+            }
+            else
+            {
+                _recycledContentToUse = null;
+            }
+        }
+
         /// <inheritdoc/>
         public sealed override void ApplyTemplate()
         {
@@ -615,46 +650,42 @@ namespace Avalonia.Controls.Presenters
                             : FuncDataTemplate.Default
                     );
 
-                // Check if template supports content virtualization
-                if (dataTemplate is IVirtualizingDataTemplate vdt &&
-                    ContentVirtualizationDiagnostics.IsEnabled)
+                // Use pre-fetched recycled content if available (set by PrepareRecycledContent)
+                // This is for virtualization templates (IVirtualizingDataTemplate and auto DataType recycling)
+                if (_recycledContentToUse != null &&
+                    (dataTemplate is IVirtualizingDataTemplate ||
+                     (dataTemplate is IRecyclingDataTemplate && dataTemplate is ITypedDataTemplate)))
                 {
-                    // Try to get recycled content from ItemsControl's pool
-                    _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
-                    var recycled = _itemsControl?.GetRecycledContent(vdt, content);
-                    
-                    newChild = vdt.Build(content, recycled);
-                    System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild virtualized for {(content is null ? "<null>" : content)} was {(recycled == newChild?"success":"FAILED")}");
-                    _virtualizingTemplate = vdt;
-                    _currentData = content;
-                    _recyclingDataTemplate = null;
-                    _autoRecyclingDataType = null;
-                }
-                // Check for automatic DataType-based recycling
-                else if (dataTemplate is IRecyclingDataTemplate rdt &&
-                         dataTemplate is ITypedDataTemplate tdt &&
-                         tdt.DataType != null &&
-                         ContentVirtualizationDiagnostics.IsEnabled)
-                {
-                    // Try to get recycled content from automatic DataType pool
-                    _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
-                    var recycled = _itemsControl?.GetRecycledContentForDataType(tdt.DataType);
+                    var recycled = _recycledContentToUse;
+                    _recycledContentToUse = null; // Clear after use
 
-                    newChild = rdt.Build(content, recycled);
-                    System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild virtualized (datatype {tdt.DataType?.FullName} for {(content is null ? "<null>" : content)} was {(recycled == newChild?"success":"FAILED")}");
-                    _recyclingDataTemplate = rdt;
-                    _autoRecyclingDataType = tdt.DataType;
-                    // _virtualizingTemplate = null;
-                    _currentData = null;
+                    if (dataTemplate is IVirtualizingDataTemplate vdt)
+                    {
+                        newChild = vdt.Build(content, recycled);
+                        System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild virtualized (explicit) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
+                        _virtualizingTemplate = vdt;
+                        _currentData = content;
+                        _recyclingDataTemplate = null;
+                        _autoRecyclingDataType = null;
+                    }
+                    else if (dataTemplate is IRecyclingDataTemplate rdt && dataTemplate is ITypedDataTemplate tdt)
+                    {
+                        newChild = rdt.Build(content, recycled);
+                        System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild virtualized (auto) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
+                        _recyclingDataTemplate = rdt;
+                        _autoRecyclingDataType = tdt.DataType;
+                        _virtualizingTemplate = null;
+                        _currentData = null;
+                    }
                 }
-                // Fall back to existing recycling behavior
+                // Fall back to existing recycling behavior (instance-based, non-virtualized)
                 else if (dataTemplate is IRecyclingDataTemplate rdt2)
                 {
                     var toRecycle = rdt2 == _recyclingDataTemplate ? oldChild : null;
                     newChild = rdt2.Build(content, toRecycle);
-                    System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild recycled for {(content is null ? "<null>" : content)} was {(toRecycle == newChild?"success":"FAILED")}");
+                    System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild recycled (instance) for {(content is null ? "<null>" : content)} was {(toRecycle == newChild ? "success" : "FAILED")}");
                     _recyclingDataTemplate = rdt2;
-                    // _virtualizingTemplate = null;
+                    _virtualizingTemplate = null;
                     _currentData = null;
                     _autoRecyclingDataType = null;
                 }
@@ -663,17 +694,17 @@ namespace Avalonia.Controls.Presenters
                     newChild = dataTemplate.Build(content);
                     System.Diagnostics.Debug.WriteLine($"###VIRT### - CreateChild new for {(content is null ? "<null>" : content)}");
                     _recyclingDataTemplate = null;
-                    // _virtualizingTemplate = null;
+                    _virtualizingTemplate = null;
                     _currentData = null;
                     _autoRecyclingDataType = null;
                 }
             }
             else
             {
-                // _recyclingDataTemplate = null;
-                // _virtualizingTemplate = null;
-                // _currentData = null;
-                // _autoRecyclingDataType = null;
+                _recyclingDataTemplate = null;
+                _virtualizingTemplate = null;
+                _currentData = null;
+                _autoRecyclingDataType = null;
             }
 
             return newChild;
