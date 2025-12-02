@@ -396,16 +396,29 @@ namespace Avalonia.Controls
             }
             else if (container is ContentControl cc)
             {
+                // Find the actual template that will be used (handles DataTemplates collection)
+                var actualTemplate = itemTemplate;
+                if (actualTemplate == null || !actualTemplate.Match(item))
+                {
+                    // No ItemTemplate set, or it doesn't match - search DataTemplates collection
+                    actualTemplate = container.FindDataTemplate(item, itemTemplate);
+                }
+
                 // Prepare recycled content from pool BEFORE setting properties
-                // Use batch update to avoid multiple UpdateChild calls
+                // Pass the resolved template to avoid duplicate FindDataTemplate in CreateChild
                 if (cc.Presenter != null)
                 {
-                    cc.Presenter.PrepareRecycledContent(item, itemTemplate);
+                    cc.Presenter.PrepareRecycledContent(item, actualTemplate);
                     cc.Presenter.BeginBatchUpdate();
                 }
 
                 SetIfUnset(cc, ContentControl.ContentProperty, item);
-                if (itemTemplate is not null)
+
+                // Set the resolved template, not itemTemplate
+                // This avoids FindDataTemplate being called again in ContentPresenter.CreateChild
+                if (actualTemplate is not null)
+                    SetIfUnset(cc, ContentControl.ContentTemplateProperty, actualTemplate);
+                else if (itemTemplate is not null)
                     SetIfUnset(cc, ContentControl.ContentTemplateProperty, itemTemplate);
 
                 // End batch update - triggers single UpdateChild with both properties set
@@ -416,13 +429,25 @@ namespace Avalonia.Controls
             }
             else if (container is ContentPresenter p)
             {
+                // Find the actual template that will be used (handles DataTemplates collection)
+                var actualTemplate = itemTemplate;
+                if (actualTemplate == null || !actualTemplate.Match(item))
+                {
+                    // No ItemTemplate set, or it doesn't match - search DataTemplates collection
+                    actualTemplate = container.FindDataTemplate(item, itemTemplate);
+                }
+
                 // Prepare recycled content from pool BEFORE setting properties
-                // Use batch update to avoid multiple UpdateChild calls
-                p.PrepareRecycledContent(item, itemTemplate);
+                // Pass the resolved template to avoid duplicate FindDataTemplate in CreateChild
+                p.PrepareRecycledContent(item, actualTemplate);
                 p.BeginBatchUpdate();
 
                 SetIfUnset(p, ContentPresenter.ContentProperty, item);
-                if (itemTemplate is not null)
+
+                // Set the resolved template to avoid duplicate FindDataTemplate
+                if (actualTemplate is not null)
+                    SetIfUnset(p, ContentPresenter.ContentTemplateProperty, actualTemplate);
+                else if (itemTemplate is not null)
                     SetIfUnset(p, ContentPresenter.ContentTemplateProperty, itemTemplate);
 
                 // End batch update - triggers single UpdateChild with both properties set
