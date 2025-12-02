@@ -419,6 +419,7 @@ namespace Avalonia.Controls.Presenters
         /// <param name="template">The data template being used.</param>
         internal void ReturnContentToVirtualizationPool(object? item, IDataTemplate? template)
         {
+            if (!ContentVirtualizationDiagnostics.IsEnabled) return;
             if (Child == null || item == null || template == null) return;
 
             _itemsControl ??= this.FindAncestorOfType<ItemsControl>();
@@ -445,6 +446,12 @@ namespace Avalonia.Controls.Presenters
         /// <param name="template">The data template to be used.</param>
         internal void PrepareRecycledContent(object? item, IDataTemplate? template)
         {
+            if (!ContentVirtualizationDiagnostics.IsEnabled)
+            {
+                _recycledContentToUse = null;
+                return;
+            }
+
             if (item == null || template == null)
             {
                 _recycledContentToUse = null;
