@@ -65,6 +65,7 @@ namespace Avalonia.Controls.Utils
 
             if (Count == 0)
             {
+                // System.Diagnostics.Debug.WriteLine($"[RSE] Add FIRST element: Index={index}, u={u:F2}, size={sizeU:F2}");
                 _elements.Add(element);
                 _sizes.Add(sizeU);
                 _startU = u;
@@ -72,11 +73,13 @@ namespace Avalonia.Controls.Utils
             }
             else if (index == LastIndex + 1)
             {
+                // System.Diagnostics.Debug.WriteLine($"[RSE] Add to END: Index={index} (after {LastIndex}), u={u:F2}, size={sizeU:F2}, Range=[{FirstIndex}-{index}]");
                 _elements.Add(element);
                 _sizes.Add(sizeU);
             }
             else if (index == FirstIndex - 1)
             {
+                // System.Diagnostics.Debug.WriteLine($"[RSE] Add to BEGINNING: Index={index} (before {FirstIndex}), u={u:F2}, size={sizeU:F2}, Range=[{index}-{LastIndex}]");
                 --_firstIndex;
                 _elements.Insert(0, element);
                 _sizes.Insert(0, sizeU);
@@ -84,6 +87,7 @@ namespace Avalonia.Controls.Utils
             }
             else
             {
+                System.Diagnostics.Debug.WriteLine($"[RSE] *** SEQUENTIAL ORDER VIOLATION *** Trying to add Index={index}, but realized range is [{FirstIndex}-{LastIndex}]");
                 throw new NotSupportedException("Can only add items to the beginning or end of realized elements.");
             }
         }
