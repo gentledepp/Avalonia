@@ -85,6 +85,8 @@ namespace Avalonia.Controls
         private bool _hasReachedStart = false;
         private bool _hasReachedEnd = false;
         private Rect _extendedViewport;
+        
+        public bool IsTracingEnabled { get; set; }
 
         static VirtualizingStackPanel()
         {
@@ -217,7 +219,7 @@ namespace Avalonia.Controls
                 // If the viewport is disjunct then we can recycle everything.
                 if (viewport.viewportIsDisjunct)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[VSP] RECYCLING ALL - HasReachedEnd={_hasReachedEnd}, HasReachedStart={_hasReachedStart}, ItemCount={items.Count}");
+                    System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] RECYCLING ALL - HasReachedEnd={_hasReachedEnd}, HasReachedStart={_hasReachedStart}, ItemCount={items.Count}");
                     _realizedElements.RecycleAllElements(_recycleElement);
                 }
 
@@ -590,7 +592,7 @@ namespace Avalonia.Controls
             var disjunct = (gapBefore > 2 && gapDistanceBefore > maxDistanceBefore) ||
                           (gapAfter > 2 && gapDistanceAfter > maxDistanceAfter);
 
-            System.Diagnostics.Debug.WriteLine($"[VSP] CalculateMeasureViewport: Anchor={anchorIndex} (u={anchorU:F2}), Realized=[{_realizedElements.FirstIndex}-{_realizedElements.LastIndex}] (Count={_realizedElements.Count}), GapBefore={gapBefore} items ({gapDistanceBefore:F0}px/{maxDistanceBefore:F0}px), GapAfter={gapAfter} items ({gapDistanceAfter:F0}px/{maxDistanceAfter:F0}px), Disjunct={disjunct}, ViewportSize={viewportSize:F0}px");
+            System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] CalculateMeasureViewport: Anchor={anchorIndex} (u={anchorU:F2}), Realized=[{_realizedElements.FirstIndex}-{_realizedElements.LastIndex}] (Count={_realizedElements.Count}), GapBefore={gapBefore} items ({gapDistanceBefore:F0}px/{maxDistanceBefore:F0}px), GapAfter={gapAfter} items ({gapDistanceAfter:F0}px/{maxDistanceAfter:F0}px), Disjunct={disjunct}, ViewportSize={viewportSize:F0}px");
             // // Check if the anchor element is not within the currently realized elements.
             // var disjunct = anchorIndex < _realizedElements.FirstIndex || 
             //                anchorIndex > _realizedElements.LastIndex;
@@ -727,7 +729,7 @@ namespace Avalonia.Controls
                     var itemsBack = (int)(distanceBack / estimatedSize);
                     index = Math.Max(0, firstIndex - itemsBack);
                     position = startU - (itemsBack * estimatedSize);
-                    System.Diagnostics.Debug.WriteLine($"[VSP] Anchor estimation: Extrapolating BACKWARD from first realized element. FirstIndex={firstIndex}, StartU={startU:F2}, ItemsBack={itemsBack}, EstimatedAnchor={index}");
+                    System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] Anchor estimation: Extrapolating BACKWARD from first realized element. FirstIndex={firstIndex}, StartU={startU:F2}, ItemsBack={itemsBack}, EstimatedAnchor={index}");
                     return;
                 }
             
@@ -744,7 +746,7 @@ namespace Avalonia.Controls
                         var itemsForward = (int)(distanceForward / estimatedSize);
                         index = Math.Min(lastIndex + 1 + itemsForward, itemCount - 1);
                         position = lastElementEndU + (itemsForward * estimatedSize);
-                        System.Diagnostics.Debug.WriteLine($"[VSP] Anchor estimation: Extrapolating FORWARD from last realized element. LastIndex={lastIndex}, LastEndU={lastElementEndU:F2}, ItemsForward={itemsForward}, EstimatedAnchor={index}");
+                        System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] Anchor estimation: Extrapolating FORWARD from last realized element. LastIndex={lastIndex}, LastEndU={lastElementEndU:F2}, ItemsForward={itemsForward}, EstimatedAnchor={index}");
                         return;
                     }
                 }
@@ -754,7 +756,7 @@ namespace Avalonia.Controls
             var startIndex = Math.Min((int)(viewportStartU / estimatedSize), itemCount - 1);
             index = startIndex;
             position = startIndex * estimatedSize;
-            System.Diagnostics.Debug.WriteLine($"[VSP] Anchor estimation: Using SIMPLE estimation (no realized elements). EstimatedSize={estimatedSize:F2}, EstimatedAnchor={index}");
+            System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] Anchor estimation: Using SIMPLE estimation (no realized elements). EstimatedSize={estimatedSize:F2}, EstimatedAnchor={index}");
         }
 
         private double GetOrEstimateElementU(int index)
@@ -1155,9 +1157,9 @@ namespace Avalonia.Controls
                 }
             }
 
-            System.Diagnostics.Debug.WriteLine($"[VSP] OnEffectiveViewportChanged: NeedsMeasure={needsMeasure}, HasReachedStart={_hasReachedStart}, HasReachedEnd={_hasReachedEnd}");
-            System.Diagnostics.Debug.WriteLine($"[VSP]   OldViewport=[{oldViewportStart:F2}-{oldViewportEnd:F2}], NewViewport=[{newViewportStart:F2}-{newViewportEnd:F2}]");
-            System.Diagnostics.Debug.WriteLine($"[VSP]   OldExtended=[{oldExtendedViewportStart:F2}-{oldExtendedViewportEnd:F2}], NewExtended=[{newExtendedViewportStart:F2}-{newExtendedViewportEnd:F2}]");
+            System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] OnEffectiveViewportChanged: NeedsMeasure={needsMeasure}, HasReachedStart={_hasReachedStart}, HasReachedEnd={_hasReachedEnd}");
+            System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP]   OldViewport=[{oldViewportStart:F2}-{oldViewportEnd:F2}], NewViewport=[{newViewportStart:F2}-{newViewportEnd:F2}]");
+            System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP]   OldExtended=[{oldExtendedViewportStart:F2}-{oldExtendedViewportEnd:F2}], NewExtended=[{newExtendedViewportStart:F2}-{newExtendedViewportEnd:F2}]");
 
             if (needsMeasure)
             {
