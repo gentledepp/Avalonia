@@ -30,10 +30,19 @@ namespace ControlCatalog.ViewModels
                 switch (type)
                 {
                     case 0:
-                        var bioLength = random.Next(0, 5); // 0-4 sentences
+                        // Create highly variable bio lengths: 0-10 sentences with weighted distribution
+                        var bioLength = random.Next(11) switch
+                        {
+                            0 => 0,                    // 9% - No bio
+                            1 or 2 => 1,               // 18% - Very short (1 line)
+                            3 or 4 or 5 => random.Next(2, 4),   // 27% - Short (2-3 lines)
+                            6 or 7 => random.Next(4, 6),        // 18% - Medium (4-5 lines)
+                            8 or 9 => random.Next(6, 9),        // 18% - Long (6-8 lines)
+                            _ => random.Next(9, 12)             // 9% - Very long (9-11 lines)
+                        };
                         var bio = bioLength > 0 ? string.Join(" ", Enumerable.Range(0, bioLength).Select(_ => SampleText[random.Next(SampleText.Length)])) : "";
                         var hasSkills = random.Next(2) == 0;
-                        var skillCount = hasSkills ? random.Next(2, 7) : 0;
+                        var skillCount = hasSkills ? random.Next(2, 10) : 0;  // More skills for variance
                         var skills = new List<string>();
                         if (hasSkills)
                         {
@@ -57,10 +66,18 @@ namespace ControlCatalog.ViewModels
                         });
                         break;
                     case 1:
-                        var descLength = random.Next(1, 6); // 1-5 sentences
+                        // Variable task descriptions: 1-10 sentences
+                        var descLength = random.Next(11) switch
+                        {
+                            0 or 1 => 1,                        // 18% - Very short
+                            2 or 3 or 4 => random.Next(2, 4),   // 27% - Short
+                            5 or 6 or 7 => random.Next(4, 7),   // 27% - Medium
+                            8 or 9 => random.Next(7, 10),       // 18% - Long
+                            _ => random.Next(10, 13)            // 9% - Very long
+                        };
                         var description = string.Join(" ", Enumerable.Range(0, descLength).Select(_ => SampleText[random.Next(SampleText.Length)]));
                         var hasSubtasks = random.Next(3) == 0; // 33% chance
-                        var subtaskCount = hasSubtasks ? random.Next(2, 6) : 0;
+                        var subtaskCount = hasSubtasks ? random.Next(2, 8) : 0;  // More subtasks
                         var subtasks = new List<string>();
                         if (hasSubtasks)
                         {
@@ -83,15 +100,23 @@ namespace ControlCatalog.ViewModels
                         });
                         break;
                     case 2:
-                        var tagCount = random.Next(1, 10); // 1-9 tags
+                        var tagCount = random.Next(1, 12); // 1-11 tags for more variance
                         var tags = new List<string>();
                         for (int j = 0; j < tagCount; j++)
                         {
                             var tag = AllTags[random.Next(AllTags.Length)];
                             if (!tags.Contains(tag)) tags.Add(tag);
                         }
-                        var hasDescription = random.Next(2) == 0; // 50% chance
-                        var productDesc = hasDescription ? string.Join(" ", Enumerable.Range(0, random.Next(1, 4)).Select(_ => SampleText[random.Next(SampleText.Length)])) : "";
+                        // Variable product descriptions: 0-8 sentences
+                        var productDescLength = random.Next(9) switch
+                        {
+                            0 => 0,                             // 11% - No description
+                            1 or 2 => 1,                        // 22% - Very short
+                            3 or 4 => random.Next(2, 4),        // 22% - Short
+                            5 or 6 => random.Next(4, 6),        // 22% - Medium
+                            7 or 8 => random.Next(6, 9)         // 22% - Long
+                        };
+                        var productDesc = productDescLength > 0 ? string.Join(" ", Enumerable.Range(0, productDescLength).Select(_ => SampleText[random.Next(SampleText.Length)])) : "";
                         items.Add(new ProductItem
                         {
                             Id = i,
@@ -107,10 +132,18 @@ namespace ControlCatalog.ViewModels
                         });
                         break;
                     case 3:
-                        var captionLength = random.Next(0, 5); // 0-4 sentences
+                        // Variable photo captions: 0-8 sentences
+                        var captionLength = random.Next(9) switch
+                        {
+                            0 => 0,                             // 11% - No caption
+                            1 or 2 => 1,                        // 22% - Very short
+                            3 or 4 => random.Next(2, 4),        // 22% - Short
+                            5 or 6 => random.Next(4, 6),        // 22% - Medium
+                            7 or 8 => random.Next(6, 9)         // 22% - Long
+                        };
                         var caption = captionLength > 0 ? string.Join(" ", Enumerable.Range(0, captionLength).Select(_ => SampleText[random.Next(SampleText.Length)])) : "";
                         var hasComments = random.Next(3) == 0; // 33% chance
-                        var commentCount = hasComments ? random.Next(1, 5) : 0;
+                        var commentCount = hasComments ? random.Next(1, 7) : 0;  // More comments for variance
                         var comments = new List<string>();
                         if (hasComments)
                         {
@@ -163,9 +196,19 @@ namespace ControlCatalog.ViewModels
         {
             "Lorem ipsum dolor sit amet consectetur adipiscing elit.",
             "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-            "Ut enim ad minim veniam quis nostrud exercitation ullamco.",
-            "Duis aute irure dolor in reprehenderit in voluptate velit.",
-            "Excepteur sint occaecat cupidatat non proident sunt in culpa."
+            "Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+            "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
+            "Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum.",
+            "Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas vestibulum tortor quam feugiat vitae ultricies eget tempor sit amet ante.",
+            "Donec pretium vulputate sapien nec sagittis aliquam malesuada bibendum arcu vitae elementum curabitur vitae nunc sed velit dignissim sodales ut eu sem integer vitae justo.",
+            "Mauris in aliquam sem fringilla ut morbi tincidunt augue interdum velit euismod in pellentesque massa placerat duis ultricies lacus sed turpis tincidunt id aliquet risus feugiat.",
+            "Viverra ipsum nunc aliquet bibendum enim facilisis gravida neque convallis a cras semper auctor neque vitae tempus quam pellentesque nec nam aliquam sem et tortor consequat.",
+            "Faucibus turpis in eu mi bibendum neque egestas congue quisque egestas diam in arcu cursus euismod quis viverra nibh cras pulvinar mattis nunc sed blandit libero volutpat.",
+            "Short text.",
+            "A",
+            "Brief.",
+            "This is a medium-length sentence that spans multiple words but stays relatively concise.",
+            "An extraordinarily long sentence that continues on and on with excessive verbosity describing mundane details in an unnecessarily elaborate manner using superfluous adjectives and redundant phrases to maximize the character count and ensure text wrapping across multiple lines when displayed in a constrained width container."
         };
         private static readonly string[] Skills = { "C#", "Python", "JavaScript", "React", "Angular", "Vue", "Node.js", "Docker", "Kubernetes", "AWS", "Azure", "SQL", "MongoDB", "Git" };
         private static readonly string[] ProductCategories = { "Electronics", "Clothing", "Books", "Home & Garden", "Sports", "Toys", "Food & Beverage" };
