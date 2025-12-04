@@ -13,10 +13,13 @@
       </TextBlock>
       <TextBlock TextWrapping="Wrap" FontStyle="Italic" Foreground="Gray">
         5000 heterogeneous items (Person, Task, Product, Photo)
-      </TextBlock>
+      </TextBlock>    
+      <CheckBox IsChecked="{Binding EnableVirtualization}" Margin="0,0,0,8">
+        Enable Content Virtualization
+      </CheckBox>
     </StackPanel>
 
-    <StackPanel DockPanel.Dock="Right" Margin="8" Width="200">
+  <!--  <StackPanel DockPanel.Dock="Right" Margin="8" Width="200">
       <TextBlock Classes="h3" Margin="0,0,0,8">Settings</TextBlock>
       <CheckBox IsChecked="{Binding EnableVirtualization}" Margin="0,0,0,8">
         Enable Content Virtualization
@@ -36,7 +39,7 @@
                    Foreground="{DynamicResource SystemAccentColor}"
                    Text="Scroll to populate cache..."/>
       </Border>
-    </StackPanel>
+    </StackPanel>-->
 
     <ListBox x:Name="MainListBox"
              ItemsSource="{Binding Items}"

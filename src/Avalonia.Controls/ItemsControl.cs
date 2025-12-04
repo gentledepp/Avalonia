@@ -516,28 +516,77 @@ namespace Avalonia.Controls
             }
             else if (container is ContentControl cc)
             {
-                // Return content to virtualization pool BEFORE clearing properties
-                // This ensures ContentPresenter has access to correct data/template when pooling
-                if(cc.Presenter != null)
+                bool shouldSkipClear = false;
+
+                // Check if we should skip clearing for virtualization
+                // When we skip clearing, the Child stays attached to this container,
+                // so we should NOT pool the Child separately (it stays with the container)
+                if(cc.Presenter != null && ContentVirtualizationDiagnostics.IsEnabled)
                 {
                     var item = cc.Content;
                     var template = cc.ContentTemplate;
-                    cc.Presenter.ReturnContentToVirtualizationPool(item, template);
+
+                    if (template is IVirtualizingDataTemplate vdt && vdt.GetKey(item) != null)
+                    {
+                        shouldSkipClear = true;
+                    }
+                    else if (template is IRecyclingDataTemplate && template is ITypedDataTemplate tdt && tdt.DataType != null)
+                    {
+                        shouldSkipClear = true;
+                    }
+
+                    // Only pool the Child separately if we ARE clearing (old behavior)
+                    // If we're skipping clear, Child stays with container, no separate pooling needed
+                    if (!shouldSkipClear)
+                    {
+                        cc.Presenter.ReturnContentToVirtualizationPool(item, template);
+                    }
                 }
 
-                cc.ClearValue(ContentControl.ContentProperty);
-                cc.ClearValue(ContentControl.ContentTemplateProperty);
+                // Only clear if NOT being recycled for virtualization
+                // This keeps the Child attached, avoiding detach/reattach visual tree churn
+                if (!shouldSkipClear)
+                {
+                    cc.ClearValue(ContentControl.ContentProperty);
+                    cc.ClearValue(ContentControl.ContentTemplateProperty);
+                }
             }
             else if (container is ContentPresenter p)
             {
-                // Return content to virtualization pool BEFORE clearing properties
-                // This ensures ContentPresenter has access to correct data/template when pooling
+                bool shouldSkipClear = false;
+
                 var item = p.Content;
                 var template = p.ContentTemplate;
-                p.ReturnContentToVirtualizationPool(item, template);
 
-                p.ClearValue(ContentPresenter.ContentProperty);
-                p.ClearValue(ContentPresenter.ContentTemplateProperty);
+                // Check if we should skip clearing for virtualization
+                // When we skip clearing, the Child stays attached to this container,
+                // so we should NOT pool the Child separately (it stays with the container)
+                if (ContentVirtualizationDiagnostics.IsEnabled)
+                {
+                    if (template is IVirtualizingDataTemplate vdt && vdt.GetKey(item) != null)
+                    {
+                        shouldSkipClear = true;
+                    }
+                    else if (template is IRecyclingDataTemplate && template is ITypedDataTemplate tdt && tdt.DataType != null)
+                    {
+                        shouldSkipClear = true;
+                    }
+                }
+
+                // Only pool the Child separately if we ARE clearing (old behavior)
+                // If we're skipping clear, Child stays with container, no separate pooling needed
+                if (!shouldSkipClear)
+                {
+                    p.ReturnContentToVirtualizationPool(item, template);
+                }
+
+                // Only clear if NOT being recycled for virtualization
+                // This keeps the Child attached, avoiding detach/reattach visual tree churn
+                if (!shouldSkipClear)
+                {
+                    p.ClearValue(ContentPresenter.ContentProperty);
+                    p.ClearValue(ContentPresenter.ContentTemplateProperty);
+                }
             }
             else if (container is ItemsControl ic)
             {
@@ -577,7 +626,48 @@ namespace Avalonia.Controls
         /// </returns>
         protected internal virtual bool NeedsContainerOverride(object? item, int index, out object? recycleKey)
         {
-            return NeedsContainer<Control>(item, out recycleKey);
+            if (item is Control)
+            {
+                recycleKey = null;
+                return false;
+            }
+
+            // When content virtualization is enabled, use type-aware recycling keys to ensure
+            // containers are only reused for compatible data types. This prevents unnecessary
+            // Child rebuilds in ContentPresenter when the data type changes.
+            if (ContentVirtualizationDiagnostics.IsEnabled)
+            {
+                var template = GetEffectiveItemTemplate();
+                if (template != null)
+                {
+                    // Use IVirtualizingDataTemplate key if available
+                    if (template is IVirtualizingDataTemplate vdt)
+                    {
+                        var key = vdt.GetKey(item);
+                        if (key != null)
+                        {
+                            recycleKey = key;
+                            return true;
+                        }
+                    }
+                    // Use DataType for automatic recycling
+                    else if (template is ITypedDataTemplate tdt && tdt.DataType != null)
+                    {
+                        recycleKey = tdt.DataType;
+                        return true;
+                    }
+                }
+
+                // Fallback: use item type as key for type-safe container pooling
+                recycleKey = item?.GetType() ?? DefaultRecycleKey;
+            }
+            else
+            {
+                // Virtualization disabled: use default single-pool behavior
+                recycleKey = DefaultRecycleKey;
+            }
+
+            return true;
         }
 
         /// <summary>
