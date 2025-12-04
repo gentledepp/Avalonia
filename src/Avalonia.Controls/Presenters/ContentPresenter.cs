@@ -694,31 +694,33 @@ namespace Avalonia.Controls.Presenters
 
                 // Use pre-fetched recycled content if available (set by PrepareRecycledContent)
                 // This is for virtualization templates (IVirtualizingDataTemplate and auto DataType recycling)
-                if (_recycledContentToUse != null &&
-                    (dataTemplate is IVirtualizingDataTemplate ||
-                     (dataTemplate is IRecyclingDataTemplate && dataTemplate is ITypedDataTemplate)))
+                if (dataTemplate is IVirtualizingDataTemplate vdt)
                 {
+                    // For IVirtualizingDataTemplate, prefer recycled content from pool, but fall back to oldChild
+                    // This handles container-level virtualization where Child stays attached
+                    var recycled = _recycledContentToUse ?? oldChild;
+                    _recycledContentToUse = null; // Clear after use
+
+                    newChild = vdt.Build(content, recycled);
+                    System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild virtualized (explicit) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
+                    _virtualizingTemplate = vdt;
+                    _currentData = content;
+                    _recyclingDataTemplate = null;
+                    _autoRecyclingDataType = null;
+                }
+                else if (_recycledContentToUse != null &&
+                         dataTemplate is IRecyclingDataTemplate rdt && dataTemplate is ITypedDataTemplate tdt)
+                {
+                    // Auto DataType recycling only when we have content from pool
                     var recycled = _recycledContentToUse;
                     _recycledContentToUse = null; // Clear after use
 
-                    if (dataTemplate is IVirtualizingDataTemplate vdt)
-                    {
-                        newChild = vdt.Build(content, recycled);
-                        System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild virtualized (explicit) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
-                        _virtualizingTemplate = vdt;
-                        _currentData = content;
-                        _recyclingDataTemplate = null;
-                        _autoRecyclingDataType = null;
-                    }
-                    else if (dataTemplate is IRecyclingDataTemplate rdt && dataTemplate is ITypedDataTemplate tdt)
-                    {
-                        newChild = rdt.Build(content, recycled);
-                        System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild virtualized (auto) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
-                        _recyclingDataTemplate = rdt;
-                        _autoRecyclingDataType = tdt.DataType;
-                        _virtualizingTemplate = null;
-                        _currentData = null;
-                    }
+                    newChild = rdt.Build(content, recycled);
+                    System.Diagnostics.Debug.WriteLineIf(ContentVirtualizationDiagnostics.IsTracingEnabled,$"###VIRT### - CreateChild virtualized (auto) for {(content is null ? "<null>" : content)} was {(recycled == newChild ? "success" : "FAILED")}");
+                    _recyclingDataTemplate = rdt;
+                    _autoRecyclingDataType = tdt.DataType;
+                    _virtualizingTemplate = null;
+                    _currentData = null;
                 }
                 // Fall back to existing recycling behavior (instance-based, non-virtualized)
                 else if (dataTemplate is IRecyclingDataTemplate rdt2)

@@ -406,6 +406,20 @@ namespace Avalonia.Controls
                     actualTemplate = container.FindDataTemplate(item, null);
                 }
 
+                // Check if we're doing container-level virtualization (Child stays attached)
+                bool isContainerVirtualization = false;
+                if (ContentVirtualizationDiagnostics.IsEnabled && actualTemplate != null)
+                {
+                    if (actualTemplate is IVirtualizingDataTemplate vdt && vdt.GetKey(item) != null)
+                    {
+                        isContainerVirtualization = true;
+                    }
+                    else if (actualTemplate is IRecyclingDataTemplate && actualTemplate is ITypedDataTemplate tdt && tdt.DataType != null)
+                    {
+                        isContainerVirtualization = true;
+                    }
+                }
+
                 // Prepare recycled content from pool BEFORE setting properties
                 // Pass the resolved template to avoid duplicate FindDataTemplate in CreateChild
                 if (cc.Presenter != null)
@@ -414,7 +428,16 @@ namespace Avalonia.Controls
                     cc.Presenter.BeginBatchUpdate();
                 }
 
-                SetIfUnset(cc, ContentControl.ContentProperty, item);
+                // When doing container-level virtualization, Content property is still set from old item
+                // We must force update it to the new item, not use SetIfUnset which would skip it
+                if (isContainerVirtualization)
+                {
+                    cc.SetCurrentValue(ContentControl.ContentProperty, item);
+                }
+                else
+                {
+                    SetIfUnset(cc, ContentControl.ContentProperty, item);
+                }
 
                 // Set the resolved template (avoids FindDataTemplate in ContentPresenter.CreateChild)
                 if (actualTemplate is not null)
@@ -438,12 +461,35 @@ namespace Avalonia.Controls
                     actualTemplate = container.FindDataTemplate(item, null);
                 }
 
+                // Check if we're doing container-level virtualization (Child stays attached)
+                bool isContainerVirtualization = false;
+                if (ContentVirtualizationDiagnostics.IsEnabled && actualTemplate != null)
+                {
+                    if (actualTemplate is IVirtualizingDataTemplate vdt && vdt.GetKey(item) != null)
+                    {
+                        isContainerVirtualization = true;
+                    }
+                    else if (actualTemplate is IRecyclingDataTemplate && actualTemplate is ITypedDataTemplate tdt && tdt.DataType != null)
+                    {
+                        isContainerVirtualization = true;
+                    }
+                }
+
                 // Prepare recycled content from pool BEFORE setting properties
                 // Pass the resolved template to avoid duplicate FindDataTemplate in CreateChild
                 p.PrepareRecycledContent(item, actualTemplate);
                 p.BeginBatchUpdate();
 
-                SetIfUnset(p, ContentPresenter.ContentProperty, item);
+                // When doing container-level virtualization, Content property is still set from old item
+                // We must force update it to the new item, not use SetIfUnset which would skip it
+                if (isContainerVirtualization)
+                {
+                    p.SetCurrentValue(ContentPresenter.ContentProperty, item);
+                }
+                else
+                {
+                    SetIfUnset(p, ContentPresenter.ContentProperty, item);
+                }
 
                 // Set the resolved template (avoids FindDataTemplate in ContentPresenter.CreateChild)
                 if (actualTemplate is not null)
