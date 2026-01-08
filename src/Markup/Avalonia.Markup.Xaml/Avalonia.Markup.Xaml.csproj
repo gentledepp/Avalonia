@@ -29,6 +29,7 @@
     <Compile Include="MarkupExtensions\OnPlatformExtension.cs" />
     <Compile Include="MarkupExtensions\ResolveByNameExtension.cs" />
     <Compile Include="MarkupExtensions\StaticResourceExtension.cs" />
+    <Compile Include="MarkupExtensions\StaticBindingExtension.cs" />
     <Compile Include="Parsers\PropertyParser.cs" />
     <Compile Include="Converters\BitmapTypeConverter.cs" />
     <Compile Include="Converters\IconTypeConverter.cs" />
