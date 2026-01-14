@@ -109,8 +109,10 @@ public class AvaloniaActivity : AppCompatActivity, IAvaloniaActivity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
-        InitializeAvaloniaView(_content);
+        if(Application is IAndroidApplication aapl)
+            aapl.SetupWithLifetime(CustomizeAppBuilder);
 
+        InitializeAvaloniaView(_content);
         base.OnCreate(savedInstanceState);
 
         if (Avalonia.Application.Current?.TryGetFeature<IActivatableLifetime>()
@@ -205,6 +207,7 @@ public class AvaloniaActivity : AppCompatActivity, IAvaloniaActivity
 
         RequestPermissionsResult?.Invoke(requestCode, permissions, grantResults);
     }
+    protected virtual AppBuilder CustomizeAppBuilder(AppBuilder builder) => builder;
 
     [MemberNotNull(nameof(_view))]
     private protected virtual void InitializeAvaloniaView(object? initialContent)
