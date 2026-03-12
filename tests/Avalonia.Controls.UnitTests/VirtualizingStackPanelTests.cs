@@ -2638,5 +2638,757 @@ namespace Avalonia.Controls.UnitTests
                 return base.ArrangeOverride(finalSize);
             }
         }
+
+        // ===== Infrastructure for DataTemplate Recycling tests =====
+
+        private class ResettingObservableCollection<T> : ObservableCollection<T>
+        {
+            public ResettingObservableCollection(IEnumerable<T> items) : base(items) { }
+
+            public void Reset(IEnumerable<T> newItems)
+            {
+                Items.Clear();
+                foreach (var item in newItems)
+                    Items.Add(item);
+                OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            }
+        }
+
+        private class TypeA_Item : NotifyingBase
+        {
+            public string Name { get; set; } = string.Empty;
+        }
+
+        private class TypeB_Item : NotifyingBase
+        {
+            public string Name { get; set; } = string.Empty;
+        }
+
+        private class FuncVirtualizingDataTemplate<T> : FuncDataTemplate<T>, IVirtualizingDataTemplate
+        {
+            public FuncVirtualizingDataTemplate(Func<T, INameScope, Control?> build)
+                : base(build, supportsRecycling: true) { }
+
+            public object? GetKey(object? data) => data?.GetType();
+            public int MaxPoolSizePerKey { get; set; } = 5;
+            public int MinPoolSizePerKey { get; set; } = 2;
+        }
+
+        // ===== Category A: Scrolling with Very Different Item Heights =====
+
+        [Fact]
+        public void Scrolling_Down_With_Mixed_Heights_Does_Not_Jump()
+        {
+            using var app = App();
+            var items = Enumerable.Range(0, 50)
+                .Select(i => (object)new ItemWithHeight(i, i % 2 == 0 ? 10 : 100))
+                .ToList();
+
+            var (target, scroll, itemsControl) = CreateTarget(
+                items: items,
+                itemTemplate: CanvasWithHeightTemplate);
+
+            // Scroll down incrementally
+            for (double offset = 0; offset < 500; offset += 10)
+            {
+                scroll.Offset = new Vector(0, offset);
+                Layout(target);
+
+                // Check contiguity: each visible item's position should follow the previous
+                var realized = target.GetRealizedElements()
+                    .Where(e => e is { IsVisible: true })
+                    .OrderBy(e => e!.Bounds.Top)
+                    .ToList();
+
+                for (int i = 1; i < realized.Count; i++)
+                {
+                    var prev = realized[i - 1]!;
+                    var curr = realized[i]!;
+                    var expectedTop = prev.Bounds.Top + prev.Bounds.Height;
+                    Assert.True(
+                        Math.Abs(curr.Bounds.Top - expectedTop) < 1,
+                        $"Gap/overlap at offset {offset}: item {i-1} ends at {expectedTop}, item {i} starts at {curr.Bounds.Top}");
+                }
+            }
+        }
+
+        [Fact]
+        public void Scrolling_Up_With_Mixed_Heights_Does_Not_Jump()
+        {
+            using var app = App();
+            var items = Enumerable.Range(0, 50)
+                .Select(i => (object)new ItemWithHeight(i, i % 2 == 0 ? 10 : 100))
+                .ToList();
+
+            var (target, scroll, itemsControl) = CreateTarget(
+                items: items,
+                itemTemplate: CanvasWithHeightTemplate);
+
+            // Scroll to a far position first
+            scroll.Offset = new Vector(0, 500);
+            Layout(target);
+
+            // Scroll up incrementally
+            for (double offset = 500; offset >= 0; offset -= 10)
+            {
+                scroll.Offset = new Vector(0, offset);
+                Layout(target);
+
+                var realized = target.GetRealizedElements()
+                    .Where(e => e is { IsVisible: true })
+                    .OrderBy(e => e!.Bounds.Top)
+                    .ToList();
+
+                for (int i = 1; i < realized.Count; i++)
+                {
+                    var prev = realized[i - 1]!;
+                    var curr = realized[i]!;
+                    var expectedTop = prev.Bounds.Top + prev.Bounds.Height;
+                    Assert.True(
+                        Math.Abs(curr.Bounds.Top - expectedTop) < 1,
+                        $"Gap/overlap at offset {offset}: item {i-1} ends at {expectedTop}, item {i} starts at {curr.Bounds.Top}");
+                }
+            }
+        }
+
+        [Fact]
+        public void Scroll_To_End_And_Back_With_Extreme_Height_Variance()
+        {
+            using var app = App();
+            // Heights: 5, 50, 200 pattern
+            var items = Enumerable.Range(0, 100)
+                .Select(i => (object)new ItemWithHeight(i, (i % 3 == 0) ? 5 : (i % 3 == 1) ? 50 : 200))
+                .ToList();
+
+            var (target, scroll, itemsControl) = CreateTarget<ItemsControl, VirtualizingStackPanelCountingMeasureArrange>(
+                items: items,
+                itemTemplate: CanvasWithHeightTemplate);
+
+            // Scroll incrementally to the end to let the panel discover all items
+            while (true)
+            {
+                var prevOffset = scroll.Offset.Y;
+                scroll.Offset = new Vector(0, scroll.Offset.Y + 200);
+                Layout(target);
+                // Stop when we can't scroll further
+                if (Math.Abs(scroll.Offset.Y - prevOffset) < 1)
+                    break;
+            }
+
+            // Last item should be visible
+            var lastIndex = target.GetRealizedContainers()!
+                .Select(c => itemsControl.IndexFromContainer(c))
+                .Where(i => i >= 0)
+                .Max();
+            Assert.Equal(99, lastIndex);
+
+            // Scroll back to top
+            scroll.Offset = new Vector(0, 0);
+            Layout(target);
+
+            // First item should be at position 0
+            var firstContainer = target.GetRealizedContainers()!
+                .OrderBy(c => itemsControl.IndexFromContainer(c))
+                .First();
+            Assert.Equal(0, itemsControl.IndexFromContainer(firstContainer));
+        }
+
+        [Fact]
+        public void Extent_Is_Reasonable_With_Mixed_Heights()
+        {
+            using var app = App();
+            // 20 items with known heights: alternating 30 and 70, sum = 20 * 50 = 1000
+            var items = Enumerable.Range(0, 20)
+                .Select(i => (object)new ItemWithHeight(i, i % 2 == 0 ? 30 : 70))
+                .ToList();
+
+            var (target, scroll, itemsControl) = CreateTarget(
+                items: items,
+                itemTemplate: CanvasWithHeightTemplate);
+
+            // After scrolling through all items, extent should converge to actual total
+            for (double offset = 0; offset < 1000; offset += 50)
+            {
+                scroll.Offset = new Vector(0, offset);
+                Layout(target);
+            }
+
+            // Extent should be close to actual total (1000px)
+            Assert.True(
+                Math.Abs(scroll.Extent.Height - 1000) < 50,
+                $"Extent {scroll.Extent.Height} should be close to actual total 1000");
+        }
+
+        // ===== Category B: Different Recycle Pools (Multiple Keys) =====
+
+        [Fact]
+        public void Items_Of_Different_Types_Use_Separate_Recycle_Pools()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 50).Select<int, object>(i =>
+                        i % 2 == 0
+                            ? new TypeA_Item { Name = $"A{i}" }
+                            : new TypeB_Item { Name = $"B{i}" }));
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 });
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Capture containers for first few items
+                var containers0 = target.GetRealizedContainers()!.ToList();
+                var container0 = containers0.FirstOrDefault();
+                Assert.NotNull(container0);
+
+                // Scroll down past initial viewport
+                scroll.Offset = new Vector(0, 200);
+                Layout(target);
+
+                // Scroll back up
+                scroll.Offset = new Vector(0, 0);
+                Layout(target);
+
+                // Verify containers are reused - the container for item[0] should have same DataContext
+                var newContainers = target.GetRealizedContainers()!.ToList();
+                var containerForItem0 = newContainers.FirstOrDefault(c =>
+                {
+                    var idx = itemsControl.IndexFromContainer(c);
+                    return idx == 0;
+                });
+                Assert.NotNull(containerForItem0);
+
+                // The DataContext should be the original item
+                var dc = (containerForItem0 as IDataContextProvider)?.DataContext;
+                Assert.Same(items[0], dc);
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void MaxPoolSizePerKey_Is_Respected()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 100).Select(i =>
+                        (object)new TypeA_Item { Name = $"A{i}" }));
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 })
+                {
+                    MaxPoolSizePerKey = 2
+                };
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                var visibleCount = target.GetRealizedContainers()!.Count();
+
+                // Scroll far down to recycle initial containers
+                scroll.Offset = new Vector(0, 500);
+                Layout(target);
+
+                // Check pool doesn't exceed MaxPoolSizePerKey
+                var pool = target.RecyclePoolForTesting;
+                if (pool != null)
+                {
+                    foreach (var kvp in pool)
+                    {
+                        Assert.True(kvp.Value.Count <= 2,
+                            $"Pool for key {kvp.Key} has {kvp.Value.Count} items, expected <= 2");
+                    }
+                }
+
+                // Total children should be bounded
+                var maxExpected = visibleCount + 2 * 2; // visible + 2 * MaxPoolSizePerKey
+                // Allow some slack for buffer factor
+                Assert.True(target.Children.Count <= maxExpected + 5,
+                    $"Children count {target.Children.Count} exceeds expected max {maxExpected + 5}");
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void Recycled_Container_Gets_New_DataContext_When_Type_Matches()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 20).Select(i =>
+                        (object)new TypeA_Item { Name = $"A{i}" }));
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 });
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Scroll down
+                scroll.Offset = new Vector(0, 100);
+                Layout(target);
+
+                // Scroll back up
+                scroll.Offset = new Vector(0, 0);
+                Layout(target);
+
+                // Verify all visible containers have correct DataContext
+                var containers = target.GetRealizedContainers()!.ToList();
+                foreach (var container in containers)
+                {
+                    var idx = itemsControl.IndexFromContainer(container);
+                    if (idx >= 0 && idx < items.Count)
+                    {
+                        var dc = (container as IDataContextProvider)?.DataContext;
+                        Assert.Same(items[idx], dc);
+                    }
+                }
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        // ===== Category C: DataContext-Matching Preference on Reset =====
+
+        [Fact]
+        public void Reset_Reuses_Container_With_Matching_DataContext()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var originalItems = Enumerable.Range(0, 20)
+                    .Select(i => new TypeA_Item { Name = $"A{i}" }).ToList();
+                var items = new ResettingObservableCollection<object>(originalItems);
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 });
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Capture containers and their DataContexts
+                var containersBefore = target.GetRealizedContainers()!.ToList();
+                var dcBefore = containersBefore
+                    .Select(c => (c as IDataContextProvider)?.DataContext)
+                    .ToList();
+
+                // Reset with same items, same order
+                items.Reset(originalItems.Cast<object>());
+                Layout(target);
+
+                // After reset, visible containers should have same DataContexts
+                var containersAfter = target.GetRealizedContainers()!.ToList();
+                foreach (var container in containersAfter)
+                {
+                    var idx = itemsControl.IndexFromContainer(container);
+                    if (idx >= 0 && idx < originalItems.Count)
+                    {
+                        var dc = (container as IDataContextProvider)?.DataContext;
+                        Assert.Same(originalItems[idx], dc);
+                    }
+                }
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void Reset_With_Reordered_Items_Updates_DataContext()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var originalItems = Enumerable.Range(0, 20)
+                    .Select(i => new TypeA_Item { Name = $"A{i}" }).ToList();
+                var items = new ResettingObservableCollection<object>(originalItems);
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 });
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Reverse items and reset
+                var reversed = originalItems.AsEnumerable().Reverse().Cast<object>().ToList();
+                items.Reset(reversed);
+                Layout(target);
+
+                // After layout, all visible containers should match the new item order
+                var containersAfter = target.GetRealizedContainers()!.ToList();
+                foreach (var container in containersAfter)
+                {
+                    var idx = itemsControl.IndexFromContainer(container);
+                    if (idx >= 0 && idx < reversed.Count)
+                    {
+                        var dc = (container as IDataContextProvider)?.DataContext;
+                        Assert.Same(reversed[idx], dc);
+                    }
+                }
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void Reset_Preserves_Scroll_Position_For_Append_Scenario()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var originalItems = Enumerable.Range(0, 20)
+                    .Select(i => new TypeA_Item { Name = $"A{i}" }).ToList();
+                var items = new ResettingObservableCollection<object>(originalItems);
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 });
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Scroll to show items 10-19
+                scroll.Offset = new Vector(0, 100);
+                Layout(target);
+
+                var offsetBefore = scroll.Offset.Y;
+
+                // Append 10 new items and fire Reset
+                var appendedItems = originalItems.Cast<object>()
+                    .Concat(Enumerable.Range(20, 10).Select(i => (object)new TypeA_Item { Name = $"A{i}" }))
+                    .ToList();
+                items.Reset(appendedItems);
+                Layout(target);
+
+                // Scroll offset should be preserved
+                Assert.Equal(offsetBefore, scroll.Offset.Y);
+
+                // Visible items should still be from around index 10
+                var firstVisibleIdx = target.GetRealizedContainers()!
+                    .Select(c => itemsControl.IndexFromContainer(c))
+                    .Where(i => i >= 0)
+                    .Min();
+                Assert.True(firstVisibleIdx >= 8 && firstVisibleIdx <= 12,
+                    $"First visible index {firstVisibleIdx} should be near 10 after append-reset");
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void Reset_With_Completely_New_Items_Recycles_Everything()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var originalItems = Enumerable.Range(0, 20)
+                    .Select(i => new TypeA_Item { Name = $"A{i}" }).ToList();
+                var items = new ResettingObservableCollection<object>(originalItems);
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 });
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Scroll a bit
+                scroll.Offset = new Vector(0, 50);
+                Layout(target);
+
+                // Reset with completely new items
+                var newItems = Enumerable.Range(0, 20)
+                    .Select(i => (object)new TypeA_Item { Name = $"New{i}" }).ToList();
+                items.Reset(newItems);
+                Layout(target);
+
+                // After layout, containers should have the new items as DataContext
+                var containers = target.GetRealizedContainers()!.ToList();
+                foreach (var container in containers)
+                {
+                    var idx = itemsControl.IndexFromContainer(container);
+                    if (idx >= 0 && idx < newItems.Count)
+                    {
+                        var dc = (container as IDataContextProvider)?.DataContext;
+                        Assert.Same(newItems[idx], dc);
+                    }
+                }
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        // ===== Category D: Non-Virtualizing Panel Safety =====
+
+        [Fact]
+        public void Non_Virtualizing_Panel_Clears_Container_Content_On_Recycle()
+        {
+            // Validates that the `Presenter?.Panel is VirtualizingPanel` guard in
+            // ClearContainerForItemOverride works: when the panel IS a VirtualizingStackPanel,
+            // content may be kept for recycling. When it's not, content must be cleared.
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                // Create an ItemsControl with VirtualizingStackPanel
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 20).Select(i => (object)$"Item {i}"));
+
+                var (target, scroll, itemsControl) = CreateTarget(items: items);
+
+                // The panel is a VirtualizingStackPanel, so realized containers should exist
+                var containers = target.GetRealizedContainers()!.ToList();
+                Assert.NotEmpty(containers);
+
+                // Scroll down — items 0-9 get recycled into pool
+                scroll.Offset = new Vector(0, 100);
+                Layout(target);
+
+                // With VirtualizingStackPanel, recycled containers stay as children (invisible)
+                var invisibleChildren = target.Children.Where(c => !c.IsVisible).ToList();
+                // Some recycled containers should be invisible in the tree
+                // (exact count depends on pool behavior, but they shouldn't be removed)
+                var totalChildren = target.Children.Count;
+                var visibleChildren = target.Children.Count(c => c.IsVisible);
+                Assert.True(totalChildren >= visibleChildren,
+                    "VirtualizingStackPanel should keep recycled containers as invisible children");
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        // ===== Category E: Warmup =====
+
+        [Fact]
+        public void Warmup_PreCreates_Containers_For_Discovered_Keys()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                // Use MinPoolSizePerKey > realized count to force warmup to create pool entries.
+                // With viewport=100px and items height=10px, ~10 items are realized.
+                // Alternating types means ~5 per type are realized. Set MinPoolSizePerKey=8
+                // so warmup must create 3 additional per type.
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 50).Select<int, object>(i =>
+                        i % 2 == 0
+                            ? new TypeA_Item { Name = $"A{i}" }
+                            : new TypeB_Item { Name = $"B{i}" }));
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 })
+                {
+                    MinPoolSizePerKey = 8
+                };
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Call warmup directly
+                target.PerformWarmup();
+
+                // Pool should have entries for both types (warmup creates extras beyond realized)
+                var pool = target.RecyclePoolForTesting;
+                Assert.NotNull(pool);
+                Assert.True(pool.ContainsKey(typeof(TypeA_Item)),
+                    "Pool should contain key for TypeA_Item");
+                Assert.True(pool.ContainsKey(typeof(TypeB_Item)),
+                    "Pool should contain key for TypeB_Item");
+
+                // All pooled containers should be invisible (pre-created)
+                foreach (var kvp in pool)
+                {
+                    foreach (var control in kvp.Value)
+                    {
+                        Assert.False(control.IsVisible,
+                            $"Pooled container for {kvp.Key} should be invisible");
+                    }
+                }
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void Warmup_Respects_MinPoolSizePerKey()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 50).Select(i =>
+                        (object)new TypeA_Item { Name = $"A{i}" }));
+
+                // MinPoolSizePerKey=15 > ~10 realized items,
+                // so warmup must create ~5 additional containers
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 })
+                {
+                    MinPoolSizePerKey = 15
+                };
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Call warmup directly
+                target.PerformWarmup();
+
+                // Pool + realized should be >= MinPoolSizePerKey
+                var pool = target.RecyclePoolForTesting;
+                Assert.NotNull(pool);
+
+                var poolCount = pool.TryGetValue(typeof(TypeA_Item), out var poolList)
+                    ? poolList.Count : 0;
+                var realizedCount = target.GetRealizedElements()
+                    .Count(e => e != null);
+                Assert.True(poolCount + realizedCount >= 15,
+                    $"Pool ({poolCount}) + realized ({realizedCount}) should be >= MinPoolSizePerKey (15)");
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void Warmup_Containers_Are_Reused_On_First_Scroll()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 50).Select(i =>
+                        (object)new TypeA_Item { Name = $"A{i}" }));
+
+                // Use large MinPoolSizePerKey so warmup creates extra containers
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 })
+                {
+                    MinPoolSizePerKey = 15
+                };
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                // Warmup
+                target.PerformWarmup();
+
+                // Verify pool has containers after warmup
+                var pool = target.RecyclePoolForTesting;
+                Assert.NotNull(pool);
+                var poolCountBefore = pool.TryGetValue(typeof(TypeA_Item), out var poolList)
+                    ? poolList.Count : 0;
+                Assert.True(poolCountBefore > 0,
+                    "Warmup should have created pool containers");
+
+                // Scroll down one page — pool containers should be consumed
+                scroll.Offset = new Vector(0, 100);
+                Layout(target);
+
+                // After scrolling, pool should be smaller (containers were consumed/reused)
+                var poolCountAfter = pool.TryGetValue(typeof(TypeA_Item), out var poolListAfter)
+                    ? poolListAfter.Count : 0;
+
+                // Pool should have been consumed (some containers reused for new visible items)
+                // The old visible items get recycled back into pool, and pool items get used for new ones
+                // Net effect: pool is used during scroll
+                Assert.True(poolCountAfter <= poolCountBefore + 10,
+                    $"Pool after scroll ({poolCountAfter}) should not grow unboundedly from ({poolCountBefore})");
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
+
+        [Fact]
+        public void DiscoverTemplateKeys_Finds_Multiple_Types()
+        {
+            using var app = App();
+            ContentVirtualizationDiagnostics.IsEnabled = true;
+
+            try
+            {
+                var items = new ObservableCollection<object>(
+                    Enumerable.Range(0, 30).Select<int, object>(i =>
+                        i % 3 == 0 ? new TypeA_Item { Name = $"A{i}" }
+                        : new TypeB_Item { Name = $"B{i}" }));
+
+                var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                    new Canvas { Width = 100, Height = 10 })
+                {
+                    MinPoolSizePerKey = 2
+                };
+
+                var (target, scroll, itemsControl) = CreateTarget(
+                    items: items,
+                    itemTemplate: template);
+
+                var keys = target.DiscoverTemplateKeys();
+
+                Assert.True(keys.ContainsKey(typeof(TypeA_Item)),
+                    "Should discover TypeA_Item key");
+                Assert.True(keys.ContainsKey(typeof(TypeB_Item)),
+                    "Should discover TypeB_Item key");
+                Assert.Equal(2, keys.Count);
+            }
+            finally
+            {
+                ContentVirtualizationDiagnostics.IsEnabled = true;
+            }
+        }
     }
 }

@@ -439,9 +439,8 @@ namespace Avalonia.Controls.Utils
 
                 if (sizeU != _sizes[i])
                 {
-                    // Update the stored size instead of marking unstable
-                    // This prevents the cascade of instability with heterogeneous items
-                    _sizes[i] = sizeU;
+                    _startUUnstable = true;
+                    break;
                 }
             }
         }

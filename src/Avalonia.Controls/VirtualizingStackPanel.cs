@@ -97,6 +97,12 @@ namespace Avalonia.Controls
         private IScrollAnchorProvider? _scrollAnchorProvider;
         private Rect _viewport;
         private Dictionary<object, List<Control>>? _recyclePool;
+
+        /// <summary>
+        /// Exposes the recycle pool for unit testing.
+        /// </summary>
+        internal IReadOnlyDictionary<object, List<Control>>? RecyclePoolForTesting => _recyclePool;
+
         private Control? _focusedElement;
         private int _focusedIndex = -1;
         private Control? _realizingElement;
@@ -283,12 +289,18 @@ namespace Avalonia.Controls
                 _realizedElements ??= new();
                 _measureElements ??= new();
 
+                // We need to set the lastEstimatedElementSizeU before calling CalculateDesiredSize()
+                _ = EstimateElementSizeU();
+
                 // Capture viewport anchor before measuring to enable extent compensation
                 CaptureViewportAnchor(orientation);
 
                 // We handle horizontal and vertical layouts here so X and Y are abstracted to:
                 // - Horizontal layouts: U = horizontal, V = vertical
                 // - Vertical layouts: U = vertical, V = horizontal
+                // Note: capture _scrollToIndex before CalculateMeasureViewport/RealizeElements
+                // clears it via GetRealizedElement.
+                var isScrollingToElement = _scrollToIndex >= 0;
                 var viewport = CalculateMeasureViewport(orientation, items);
 
                 // Track the extended viewport we're measuring with to prevent redundant invalidations
@@ -298,7 +310,7 @@ namespace Avalonia.Controls
                 if (viewport.viewportIsDisjunct)
                 {
                     System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] RECYCLING ALL - HasReachedEnd={_hasReachedEnd}, HasReachedStart={_hasReachedStart}, ItemCount={items.Count}");
-                    _realizedElements.RecycleAllElements(_recycleElement);
+                    _realizedElements!.RecycleAllElements(_recycleElement);
                 }
 
                 // Do the measure, creating/recycling elements as necessary to fill the viewport. Don't
@@ -307,11 +319,7 @@ namespace Avalonia.Controls
 
                 // Now swap the measureElements and realizedElements collection.
                 (_measureElements, _realizedElements) = (_realizedElements, _measureElements);
-                _measureElements.ResetForReuse();
-
-                // Calculate estimate from NEWLY measured elements for contextually-accurate extent calculation.
-                // This eliminates temporal mismatch where old viewport data was used to estimate new viewport.
-                _ = EstimateElementSizeU();
+                _measureElements!.ResetForReuse();
 
                 // If there is a focused element is outside the visible viewport (i.e.
                 // _focusedElement is non-null), ensure it's measured.
@@ -319,8 +327,11 @@ namespace Avalonia.Controls
 
                 var desiredSize = CalculateDesiredSize(orientation, items.Count, viewport);
 
-                // Compensate for extent changes to prevent scroll jumping
-                CompensateForExtentChange(orientation, desiredSize);
+                // Compensate for extent changes to prevent scroll jumping.
+                // Skip during ScrollIntoView - the anchor position is intentionally estimated
+                // and compensation would incorrectly shift it.
+                if (!isScrollingToElement)
+                    CompensateForExtentChange(orientation, desiredSize);
 
                 System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled,
                     $"[VSP-MEASURE] DesiredSize: {desiredSize}, " +
@@ -333,7 +344,7 @@ namespace Avalonia.Controls
             finally
             {
                 _isInLayout = false;
-                // Don't clear _suppressScrollIntoView here - it will be cleared when extent stabilizes
+                _suppressScrollIntoView = false;
             }
         }
 
@@ -423,6 +434,9 @@ namespace Avalonia.Controls
                     Threading.Dispatcher.UIThread.Post(PerformWarmup, Threading.DispatcherPriority.Background);
                 }
             }
+
+            // Always update special elements (focused, scroll-to) on collection changes
+            UpdateSpecialElementsOnItemsChanged(e);
 
             if (_realizedElements is null)
                 return;
@@ -562,6 +576,132 @@ namespace Avalonia.Controls
             }
         }
 
+        private void UpdateSpecialElementsOnItemsChanged(NotifyCollectionChangedEventArgs e)
+        {
+            switch (e.Action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    if (_focusedElement is not null && e.NewStartingIndex <= _focusedIndex)
+                    {
+                        var oldIndex = _focusedIndex;
+                        _focusedIndex += e.NewItems!.Count;
+                        _updateElementIndex(_focusedElement, oldIndex, _focusedIndex);
+                    }
+                    if (_scrollToElement is not null && e.NewStartingIndex <= _scrollToIndex)
+                    {
+                        _scrollToIndex += e.NewItems!.Count;
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                    if (_focusedElement is not null)
+                    {
+                        if (e.OldStartingIndex <= _focusedIndex && _focusedIndex < e.OldStartingIndex + e.OldItems!.Count)
+                        {
+                            RecycleFocusedElement();
+                        }
+                        else if (e.OldStartingIndex < _focusedIndex)
+                        {
+                            var oldIndex = _focusedIndex;
+                            _focusedIndex -= e.OldItems!.Count;
+                            _updateElementIndex(_focusedElement, oldIndex, _focusedIndex);
+                        }
+                    }
+                    if (_scrollToElement is not null)
+                    {
+                        if (e.OldStartingIndex <= _scrollToIndex && _scrollToIndex < e.OldStartingIndex + e.OldItems!.Count)
+                        {
+                            RecycleScrollToElement();
+                        }
+                        else if (e.OldStartingIndex < _scrollToIndex)
+                        {
+                            _scrollToIndex -= e.OldItems!.Count;
+                        }
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Replace:
+                    if (_focusedElement is not null && e.OldStartingIndex <= _focusedIndex && _focusedIndex < e.OldStartingIndex + e.OldItems!.Count)
+                    {
+                        RecycleFocusedElement();
+                    }
+                    if (_scrollToElement is not null && e.OldStartingIndex <= _scrollToIndex && _scrollToIndex < e.OldStartingIndex + e.OldItems!.Count)
+                    {
+                        RecycleScrollToElement();
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Move:
+                    if (e.OldStartingIndex < 0)
+                    {
+                        goto case NotifyCollectionChangedAction.Reset;
+                    }
+
+                    if (_focusedElement is not null)
+                    {
+                        if (e.OldStartingIndex <= _focusedIndex && _focusedIndex < e.OldStartingIndex + e.OldItems!.Count)
+                        {
+                            var oldIndex = _focusedIndex;
+                            _focusedIndex = e.NewStartingIndex + (_focusedIndex - e.OldStartingIndex);
+                            _updateElementIndex(_focusedElement, oldIndex, _focusedIndex);
+                        }
+                        else
+                        {
+                            var newFocusedIndex = _focusedIndex;
+
+                            if (e.OldStartingIndex < _focusedIndex)
+                            {
+                                newFocusedIndex -= e.OldItems!.Count;
+                            }
+
+                            if (e.NewStartingIndex <= newFocusedIndex)
+                            {
+                                newFocusedIndex += e.NewItems!.Count;
+                            }
+
+                            if (newFocusedIndex != _focusedIndex)
+                            {
+                                var oldIndex = _focusedIndex;
+                                _focusedIndex = newFocusedIndex;
+                                _updateElementIndex(_focusedElement, oldIndex, _focusedIndex);
+                            }
+                        }
+                    }
+
+                    if (_scrollToElement is not null)
+                    {
+                        if (e.OldStartingIndex <= _scrollToIndex && _scrollToIndex < e.OldStartingIndex + e.OldItems!.Count)
+                        {
+                            _scrollToIndex = e.NewStartingIndex + (_scrollToIndex - e.OldStartingIndex);
+                        }
+                        else
+                        {
+                            var newScrollToIndex = _scrollToIndex;
+
+                            if (e.OldStartingIndex < _scrollToIndex)
+                            {
+                                newScrollToIndex -= e.OldItems!.Count;
+                            }
+
+                            if (e.NewStartingIndex <= newScrollToIndex)
+                            {
+                                newScrollToIndex += e.NewItems!.Count;
+                            }
+
+                            _scrollToIndex = newScrollToIndex;
+                        }
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Reset:
+                    if (_focusedElement is not null)
+                    {
+                        RecycleFocusedElement();
+                    }
+                    if (_scrollToElement is not null)
+                    {
+                        RecycleScrollToElement();
+                    }
+                    break;
+            }
+        }
+
         protected override void OnItemsControlChanged(ItemsControl? oldValue)
         {
             base.OnItemsControlChanged(oldValue);
@@ -570,6 +710,24 @@ namespace Avalonia.Controls
                 oldValue.PropertyChanged -= OnItemsControlPropertyChanged;
             if (ItemsControl is not null)
                 ItemsControl.PropertyChanged += OnItemsControlPropertyChanged;
+
+            _realizedElements?.ResetForReuse();
+            _measureElements?.ResetForReuse();
+            if (ItemsControl is not null && _focusedElement is not null)
+            {
+                RecycleFocusedElement();
+            }
+            if (ItemsControl is not null && _scrollToElement is not null)
+            {
+                RecycleScrollToElement();
+            }
+            if (ItemsControl is null)
+            {
+                _focusedElement = null;
+                _scrollToElement = null;
+            }
+            _focusedIndex = -1;
+            _scrollToIndex = -1;
         }
 
         protected override IInputElement? GetControl(NavigationDirection direction, IInputElement? from, bool wrap)
@@ -825,36 +983,8 @@ namespace Avalonia.Controls
             }
 
             // Check if the anchor element is not within the currently realized elements.
-            // Use distance-based tolerance for variable-height items to prevent excessive recycling.
-            var gapBefore = _realizedElements.FirstIndex - anchorIndex;
-            var gapAfter = anchorIndex - _realizedElements.LastIndex;
-
-            // Calculate the actual pixel distance of the gap using estimated element size
-            var estimatedSize = EstimateElementSizeU();
-            var gapDistanceBefore = gapBefore * estimatedSize;
-            var gapDistanceAfter = gapAfter * estimatedSize;
-
-            // Calculate viewport size and buffer tolerance
-            var viewportSize = viewportEnd - viewportStart;
-
-            // Allow gaps up to a fraction of the viewport size:
-            // - Backward gaps (scrolling up): Allow up to 100% of viewport size
-            //   This is typically one buffer's worth and can be realized efficiently
-            // - Forward gaps (scrolling down): Allow up to 50% of viewport size
-            //   Keep this tighter since forward scrolling is usually faster
-            var maxDistanceBefore = viewportSize * 1.0;  // 100% of viewport
-            var maxDistanceAfter = viewportSize * 0.5;   // 50% of viewport
-
-            // A gap is only disjunct if BOTH conditions are true:
-            // 1. The item count gap exceeds a minimum threshold (2 items)
-            // 2. The pixel distance exceeds the viewport-based tolerance
-            var disjunct = (gapBefore > 2 && gapDistanceBefore > maxDistanceBefore) ||
-                          (gapAfter > 2 && gapDistanceAfter > maxDistanceAfter);
-
-            System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled, $"[VSP] CalculateMeasureViewport: Anchor={anchorIndex} (u={anchorU:F2}), Realized=[{_realizedElements.FirstIndex}-{_realizedElements.LastIndex}] (Count={_realizedElements.Count}), GapBefore={gapBefore} items ({gapDistanceBefore:F0}px/{maxDistanceBefore:F0}px), GapAfter={gapAfter} items ({gapDistanceAfter:F0}px/{maxDistanceAfter:F0}px), Disjunct={disjunct}, ViewportSize={viewportSize:F0}px");
-            // // Check if the anchor element is not within the currently realized elements.
-            // var disjunct = anchorIndex < _realizedElements.FirstIndex || 
-            //                anchorIndex > _realizedElements.LastIndex;
+            var disjunct = anchorIndex < _realizedElements.FirstIndex ||
+                anchorIndex > _realizedElements.LastIndex;
 
             return new MeasureViewport
             {
@@ -904,17 +1034,6 @@ namespace Avalonia.Controls
             if (_realizedElements is null)
                 return _lastEstimatedElementSizeU;
 
-            // Skip re-estimation if realized range hasn't changed
-            // This prevents smoothing convergence over multiple passes when measuring the same elements
-            var firstIndex = _realizedElements.FirstIndex;
-            var lastIndex = _realizedElements.LastIndex;
-            if (firstIndex == _lastEstimateFirstIndex && lastIndex == _lastEstimateLastIndex)
-            {
-                System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled,
-                    $"[VSP-ESTIMATE] Skipping re-estimation: realized range unchanged [{firstIndex}-{lastIndex}]");
-                return _lastEstimatedElementSizeU;
-            }
-
             var orientation = Orientation;
             var total = 0.0;
             var divisor = 0.0;
@@ -935,40 +1054,8 @@ namespace Avalonia.Controls
             if (divisor == 0 || total == 0)
                 return _lastEstimatedElementSizeU;
 
-            var newAverage = total / divisor;
-
-            // Use direct averaging for accurate extent calculation
-            // With Phase 1 fix (temporal mismatch eliminated) and "skip re-estimation when range
-            // unchanged" optimization, we don't need smoothing for larger samples anymore
-            if (_lastEstimatedElementSizeU > 0 && divisor < 5)
-            {
-                // Apply smoothing only for very small samples (< 5 items) to prevent wild swings
-                var smoothingFactor = 0.3;
-                var smoothedEstimate = (_lastEstimatedElementSizeU * (1 - smoothingFactor)) +
-                                      (newAverage * smoothingFactor);
-
-                System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled,
-                    $"[VSP-ESTIMATE] Realized range [{firstIndex}-{lastIndex}]: " +
-                    $"avg={newAverage:F2}, smoothed={smoothedEstimate:F2} " +
-                    $"(old={_lastEstimatedElementSizeU:F2}, factor={smoothingFactor:F2})");
-
-                // Track the realized range used for this estimate
-                _lastEstimateFirstIndex = firstIndex;
-                _lastEstimateLastIndex = lastIndex;
-
-                return _lastEstimatedElementSizeU = smoothedEstimate;
-            }
-
-            // For larger samples (>= 5), use direct average without smoothing
-            // This provides immediate adaptation to new item sizes
-            System.Diagnostics.Debug.WriteLineIf(IsTracingEnabled,
-                $"[VSP-ESTIMATE] Realized range [{firstIndex}-{lastIndex}]: " +
-                $"avg={newAverage:F2} (direct, no smoothing)");
-
-            _lastEstimateFirstIndex = firstIndex;
-            _lastEstimateLastIndex = lastIndex;
-
-            return _lastEstimatedElementSizeU = newAverage;
+            // Store and return the estimate.
+            return _lastEstimatedElementSizeU = total / divisor;
         }
 
         private void GetOrEstimateAnchorElementForViewport(
@@ -1602,6 +1689,26 @@ namespace Avalonia.Controls
             }
         }
 
+        private void RecycleFocusedElement()
+        {
+            if (_focusedElement != null)
+            {
+                RecycleElementOnItemRemoved(_focusedElement);
+            }
+            _focusedElement = null;
+            _focusedIndex = -1;
+        }
+
+        private void RecycleScrollToElement()
+        {
+            if (_scrollToElement != null)
+            {
+                RecycleElementOnItemRemoved(_scrollToElement);
+            }
+            _scrollToElement = null;
+            _scrollToIndex = -1;
+        }
+
         private void RecycleElementOnItemRemoved(Control element)
         {
             Debug.Assert(ItemContainerGenerator is not null);
@@ -1609,7 +1716,7 @@ namespace Avalonia.Controls
             _scrollAnchorProvider?.UnregisterAnchorCandidate(element);
 
             var recycleKey = element.GetValue(RecycleKeyProperty);
-            
+
             if (recycleKey is null || recycleKey == s_itemIsItsOwnContainer)
             {
                 RemoveInternalChild(element);
@@ -1950,7 +2057,7 @@ namespace Avalonia.Controls
         /// Discovers unique template types/keys by sampling items from the collection.
         /// Returns a dictionary mapping recycle keys to target warmup counts.
         /// </summary>
-        private Dictionary<object, int> DiscoverTemplateKeys()
+        internal Dictionary<object, int> DiscoverTemplateKeys()
         {
             var templateKeys = new Dictionary<object, int>();
             var items = Items;
@@ -2011,7 +2118,7 @@ namespace Avalonia.Controls
         /// ready to be reused during scrolling. This eliminates the expensive template instantiation
         /// cost during the first scroll.
         /// </summary>
-        private void PerformWarmup()
+        internal void PerformWarmup()
         {
             if (_isWarmupComplete || Items == null || Items.Count == 0)
                 return;

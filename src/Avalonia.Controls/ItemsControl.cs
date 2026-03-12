@@ -611,6 +611,14 @@ namespace Avalonia.Controls
         /// </returns>
         protected bool NeedsContainer<T>(object? item, out object? recycleKey) where T : Control
         {
+            // If the item is already a container of the expected type, it can be used directly
+            // without wrapping. This must be checked first, before content virtualization logic.
+            if (item is T)
+            {
+                recycleKey = null;
+                return false;
+            }
+
             // When content virtualization is enabled, use type-aware recycling keys to ensure
             // containers are only reused for compatible data types. This prevents unnecessary
             // Child rebuilds in ContentPresenter when the data type changes.
@@ -646,11 +654,6 @@ namespace Avalonia.Controls
                 // Example: typeof(TaskItem) key → TaskItem pool → template with DataType=TaskItem
                 recycleKey = item?.GetType() ?? DefaultRecycleKey;
                 return true;
-            }
-            else if (item is T)
-            {
-                recycleKey = null;
-                return false;
             }
 
             recycleKey = DefaultRecycleKey;
