@@ -201,4 +201,25 @@ public partial class BindingExpressionTests
 
         Assert.Equal("foo", data.StringValue);
     }
+
+    [Fact]
+    public void OneWay_Binding_Updates_Target_When_Changes_And_Source_Raises_PropertyChanged()
+    {
+        var data = new ViewModel { StringValue = "foo" };
+        var target = CreateTarget<ViewModel, string?>(
+            x => x.StringValue,
+            dataContext: data,
+            mode: BindingMode.OneWay);
+
+        Assert.Equal("foo", target.String);
+
+        // the "target.String" setter uses 'SetValue' which will remove any binding assigned to a property(at the specified priority) and replace it with the value you provide. This is by design.
+        // Since we do not want this, we use SetCurrentValue instead. This method is public and exists specifically to change active values without altering their binding source.
+        target.SetCurrentStringValue("bar");
+        Assert.Equal("bar", target.String);
+
+        data.RaisePropertyChanged(nameof(data.StringValue));
+
+        Assert.Equal("foo", target.String);
+    }
 }

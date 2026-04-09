@@ -396,6 +396,11 @@ public abstract partial class BindingExpressionTests
             set => SetValue(StringProperty, value);
         }
 
+        public void SetCurrentStringValue(string newValue)
+        {
+            SetCurrentValue(StringProperty, newValue);
+        }
+
         public string? ReadOnlyString
         {
             get => _readOnlyString;
