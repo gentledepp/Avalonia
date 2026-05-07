@@ -62,6 +62,17 @@ namespace Avalonia.Controls.PullToRefresh
                 if (isInteractingForRefresh != _isInteractingForRefresh)
                 {
                     SetAndRaise(IsInteractingForRefreshProperty, ref _isInteractingForRefresh, isInteractingForRefresh);
+
+                    // Keep _entered in sync with IsInteractingForRefresh.
+                    // The flag can be cleared by paths other than PullGestureEnded
+                    // (ScrollViewer_ScrollChanged / ScrollViewer_PointerReleased on the adapter).
+                    // Without this, InteractingStateEntered would short-circuit and never
+                    // re-assert the flag for the rest of the gesture, leaving the visualizer
+                    // stuck in Idle and the spinner invisible until the next gesture.
+                    if (!isInteractingForRefresh)
+                    {
+                        _entered = false;
+                    }
                 }
             }
         }
