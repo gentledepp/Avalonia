@@ -43,6 +43,13 @@ namespace Avalonia.Controls.PullToRefresh
             {
                 EndPull();
             }
+
+            // PointerReleased clears these fields; PointerCaptureLost must do the same,
+            // otherwise the next gesture re-enters PointerMoved with _pullInProgress=true
+            // and reuses the just-ended _gestureId for a new PullGestureEvent.
+            _tracking = null;
+            _initialPosition = default;
+            _pullInProgress = false;
         }
 
         protected override void PointerPressed(PointerPressedEventArgs e)
