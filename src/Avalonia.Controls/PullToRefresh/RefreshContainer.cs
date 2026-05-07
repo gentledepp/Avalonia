@@ -147,9 +147,20 @@ namespace Avalonia.Controls
 
         private void Visualizer_RefreshRequested(object? sender, RefreshRequestedEventArgs e)
         {
+            // Guarantee the inner deferral is balanced even if a downstream handler
+            // of RefreshRequestedEvent throws synchronously from RaiseEvent.
+            // Without this, a synchronously-throwing consumer leaves the visualizer's
+            // deferral count above zero forever, so RefreshCompleted never fires and
+            // the spinner stays stuck in Refreshing.
             var ev = new RefreshRequestedEventArgs(e.GetDeferral(), RefreshRequestedEvent);
-            RaiseEvent(ev);
-            ev.DecrementCount();
+            try
+            {
+                RaiseEvent(ev);
+            }
+            finally
+            {
+                ev.DecrementCount();
+            }
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
