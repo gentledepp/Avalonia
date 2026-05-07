@@ -39,6 +39,26 @@ namespace Avalonia.Input.GestureRecognizers
             }
         }
 
+        public bool Remove(GestureRecognizer recognizer)
+        {
+            if (_recognizers == null || !_recognizers.Remove(recognizer))
+            {
+                return false;
+            }
+
+            if (recognizer.Target == _inputElement)
+            {
+                recognizer.Target = null;
+            }
+
+            if (recognizer is ISetLogicalParent logical)
+            {
+                logical.SetParent(null);
+            }
+
+            return true;
+        }
+
         static readonly List<GestureRecognizer> s_Empty = new List<GestureRecognizer>();
 
         public IEnumerator<GestureRecognizer> GetEnumerator()

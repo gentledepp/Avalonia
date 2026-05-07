@@ -95,6 +95,18 @@ namespace Avalonia.Controls.PullToRefresh
                 _interactionSource.RemoveHandler(Gestures.PullGestureEndedEvent, _refreshInfoProvider.InteractingStateExited);
             }
 
+            // Remove the previous pull gesture recognizer from the previous interaction source,
+            // otherwise repeated Adapt() calls (e.g. when the visual tree gets re-templated)
+            // accumulate recognizers, leading to duplicate PullGesture/PullGestureEnded events.
+            if (_pullGestureRecognizer != null && _interactionSource != null)
+            {
+                _interactionSource.GestureRecognizers.Remove(_pullGestureRecognizer);
+            }
+
+            _pullGestureRecognizer = null;
+            _interactionSource = null;
+            _isVisualizerInteractionSourceAttached = false;
+
             _refreshInfoProvider = null;
             _scrollViewer = adaptee;
 
