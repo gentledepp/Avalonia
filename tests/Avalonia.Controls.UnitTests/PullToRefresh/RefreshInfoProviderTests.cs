@@ -50,6 +50,23 @@ namespace Avalonia.Controls.UnitTests.PullToRefresh
                 "PullGestureEvent must re-assert IsInteractingForRefresh after it was cleared by something other than PullGestureEnded");
         }
 
+        // Repro for the typo where horizontal pulls checked Height==0 instead of Width==0.
+        // With Width==0, value.X / Width produces +Infinity / NaN, which then breaks every
+        // downstream consumer of InteractionRatio (Math.Min(1, NaN) returns NaN).
+        [Fact]
+        public void Horizontal_pull_with_zero_width_produces_safe_InteractionRatio()
+        {
+            var provider = new RefreshInfoProvider(
+                PullDirection.LeftToRight,
+                new Size(0, 100),
+                visual: null);
+
+            provider.ValuesChanged(new Vector(50, 0));
+
+            Assert.False(double.IsNaN(provider.InteractionRatio));
+            Assert.False(double.IsInfinity(provider.InteractionRatio));
+        }
+
         // Sanity check for the existing happy-path: a complete gesture lifecycle
         // (Entered -> Exited -> Entered) must toggle IsInteractingForRefresh correctly.
         [Fact]

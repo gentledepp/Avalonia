@@ -161,7 +161,7 @@ namespace Avalonia.Controls.PullToRefresh
                     break;
                 case PullDirection.LeftToRight:
                 case PullDirection.RightToLeft:
-                    InteractionRatio = _refreshVisualizerSize.Height == 0 ? 1 : Math.Min(1, value.X / _refreshVisualizerSize.Width);
+                    InteractionRatio = _refreshVisualizerSize.Width == 0 ? 1 : Math.Min(1, value.X / _refreshVisualizerSize.Width);
                     break;
             }
         }
