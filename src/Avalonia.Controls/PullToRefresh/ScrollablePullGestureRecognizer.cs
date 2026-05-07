@@ -88,15 +88,30 @@ namespace Avalonia.Controls.PullToRefresh
 
         protected override void PointerReleased(PointerReleasedEventArgs e)
         {
-            if (_pullInProgress == true)
+            try
             {
-                EndPull();
-                e.Pointer.Capture(null);
+                if (_pullInProgress == true)
+                {
+                    EndPull();
+                }
             }
+            finally
+            {
+                // HandlePull captures the pointer on every PointerMoved with positive delta.
+                // The (true, false) -> EndPull transition in PointerMoved clears
+                // _pullInProgress without releasing capture, so by the time we get here
+                // the gesture is no longer in progress but the pointer can still be
+                // captured by this recognizer. Always release capture so the next
+                // gesture starts from a clean state.
+                if (_tracking != null)
+                {
+                    e.Pointer.Capture(null);
+                }
 
-            _tracking = null;
-            _initialPosition = default;
-            _pullInProgress = false;
+                _tracking = null;
+                _initialPosition = default;
+                _pullInProgress = false;
+            }
         }
 
         private bool BeginPull(PointerEventArgs e, Vector delta)
