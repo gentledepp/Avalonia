@@ -15,6 +15,7 @@ namespace Avalonia.Controls.Primitives
     /// <c>VisualRoot</c> is null, and <c>ImmediateRenderer</c> is a pure traversal, so nothing here
     /// disturbs the presenter's layout.
     /// </remarks>
+    [TemplatePart("PART_Frame", typeof(Border))]
     [TemplatePart("PART_Viewport", typeof(Border))]
     public class TextSelectionMagnifier : TemplatedControl
     {
@@ -37,6 +38,14 @@ namespace Avalonia.Controls.Primitives
         };
 
         private Border? _viewport;
+        private Border? _frame;
+
+        /// <summary>
+        /// The inset of the visible frame inside the control. The frame's drop shadow has to fall
+        /// inside the control's own bounds, because a shadow drawn outside them is clipped away, so
+        /// the control measures larger than the loupe and the caller has to allow for the gap.
+        /// </summary>
+        internal Thickness FrameMargin => _frame?.Margin ?? default;
 
         /// <summary>The brush painting the magnified image. Exposed for tests.</summary>
         internal VisualBrush SourceBrush => _brush;
@@ -63,6 +72,7 @@ namespace Avalonia.Controls.Primitives
         {
             base.OnApplyTemplate(e);
 
+            _frame = e.NameScope.Find<Border>("PART_Frame");
             _viewport = e.NameScope.Find<Border>("PART_Viewport");
 
             // Painting the brush as the viewport's Background gets the rounded corners for free -
@@ -81,8 +91,11 @@ namespace Avalonia.Controls.Primitives
 
             var zoom = Zoom <= 0 ? 1 : Zoom;
             // DesiredSize, not Bounds: the loupe is only arranged on the layout pass after it is
-            // shown, so Bounds is still zero on the frame the drag starts.
-            var size = DesiredSize.Width > 0 && DesiredSize.Height > 0 ? DesiredSize : Bounds.Size;
+            // shown, so Bounds is still zero on the frame the drag starts. Deflate by the frame's
+            // margin, because the magnified image fills the frame, not the whole control - the rest
+            // is the transparent gutter the drop shadow needs.
+            var outer = DesiredSize.Width > 0 && DesiredSize.Height > 0 ? DesiredSize : Bounds.Size;
+            var size = outer.Deflate(FrameMargin);
 
             if (size.Width <= 0 || size.Height <= 0)
                 return;

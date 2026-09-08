@@ -192,9 +192,11 @@ namespace Avalonia.Controls.UnitTests
 
                 Assert.Equal(RelativeUnit.Absolute, brush.SourceRect.Unit);
 
-                // The window is the viewport shrunk by the zoom.
-                Assert.Equal(magnifier.DesiredSize.Width / magnifier.Zoom, source.Width, 3);
-                Assert.Equal(magnifier.DesiredSize.Height / magnifier.Zoom, source.Height, 3);
+                // The window is the visible loupe - control minus shadow gutter - shrunk by the zoom.
+                var glass = magnifier.DesiredSize.Deflate(magnifier.FrameMargin);
+                Assert.Equal(new Size(120, 48), glass);
+                Assert.Equal(glass.Width / magnifier.Zoom, source.Width, 3);
+                Assert.Equal(glass.Height / magnifier.Zoom, source.Height, 3);
 
                 // It never magnifies blank space past the edge of the field...
                 Assert.True(new Rect(textBox.Bounds.Size).Contains(source),
@@ -365,10 +367,17 @@ namespace Avalonia.Controls.UnitTests
         /// </summary>
         private static void GiveMagnifierATemplate(TextSelectionMagnifier magnifier, TopLevel topLevel)
         {
+            // Mirrors the shipped themes, gutter included: the frame is inset so its drop shadow
+            // falls inside the control, and the magnified image fills the frame, not the control.
             magnifier.Template = new FuncControlTemplate<TextSelectionMagnifier>((_, scope) =>
-                new Border { Name = "PART_Viewport" }.RegisterInNameScope(scope));
-            magnifier.Width = 120;
-            magnifier.Height = 48;
+                new Border
+                {
+                    Name = "PART_Frame",
+                    Margin = new Thickness(12),
+                    Child = new Border { Name = "PART_Viewport" }.RegisterInNameScope(scope)
+                }.RegisterInNameScope(scope));
+            magnifier.Width = 144;
+            magnifier.Height = 72;
 
             magnifier.ApplyTemplate();
             topLevel.LayoutManager.ExecuteLayoutPass();

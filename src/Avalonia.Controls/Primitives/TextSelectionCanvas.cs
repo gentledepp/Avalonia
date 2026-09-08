@@ -315,10 +315,13 @@ namespace Avalonia.Controls.Primitives
 
             _magnifier.Update(source, focus);
 
-            // Sit above the magnified line, centred on the caret.
+            // Sit above the magnified line, centred on the caret. The control is larger than the
+            // visible loupe - it carries a transparent gutter so the drop shadow has somewhere to
+            // fall - so take that gutter out of the placement, or the loupe would float too high.
+            var gutter = _magnifier.FrameMargin;
             var anchor = ToLayer(new Point(caret.Center.X, caret.Top));
-            var left = anchor.X - size.Width / 2;
-            var top = anchor.Y - size.Height - _magnifier.VerticalOffset;
+            var left = anchor.X - size.Width / 2 + (gutter.Right - gutter.Left) / 2;
+            var top = anchor.Y - size.Height - _magnifier.VerticalOffset + gutter.Bottom;
 
             // Keep it on screen. The layer spans the top level, so its arranged size is the bound.
             if (VisualParent is TextSelectorLayer { AvailableSize.Width: > 0 } layer)
