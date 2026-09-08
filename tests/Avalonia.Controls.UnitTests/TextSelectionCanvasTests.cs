@@ -230,6 +230,64 @@ namespace Avalonia.Controls.UnitTests
         }
 
         [Fact]
+        public void Handles_Work_When_The_TextBox_Was_Focused_Before_It_Had_A_Template()
+        {
+            // The "impostor" pattern: a read-only placeholder is swapped for a real TextBox, which is
+            // focused the instant it becomes visible - before it has ever been measured, so before it
+            // has a template. TextBox.OnApplyTemplate then calls ShowCaret because IsFocused is
+            // already true, and the selection canvas is handed a presenter that is not attached yet.
+            using (UnitTestApplication.Start(Services))
+            {
+                var textBox = new TextBox
+                {
+                    Template = CreateTextBoxTemplateWithSelectionBindings(),
+                    Text = "Hello world",
+                    Width = 150,
+                    IsVisible = false,
+                };
+
+                var topLevel = new TestTopLevel(CreateMockTopLevelImpl().Object)
+                {
+                    Template = CreateTopLevelTemplate(),
+                    Content = new VisualLayerManager
+                    {
+                        Child = new Border { Width = 200, Height = 200, Child = textBox },
+                        EnableTextSelectorLayer = true
+                    }
+                };
+                topLevel.LayoutManager.ExecuteInitialLayoutPass();
+
+                // Hidden controls are never measured, so no template and no presenter yet.
+                Assert.Null(textBox.FindDescendantOfType<TextPresenter>());
+
+                textBox.IsVisible = true;
+                textBox.Focus();
+                textBox.SelectAll();
+
+                topLevel.LayoutManager.ExecuteLayoutPass();
+
+                var presenter = textBox.FindDescendantOfType<TextPresenter>()!;
+                presenter.EnsureTextSelectionLayer();
+                var canvas = presenter.TextSelectionHandleCanvas!;
+                canvas.Show(forceTouchMode: true);
+                topLevel.LayoutManager.ExecuteLayoutPass();
+
+                var endHandle = canvas.Children.OfType<TextSelectionHandle>().ToList()[2];
+
+                var touch = new TouchTestHelper();
+                touch.Down(endHandle);
+                touch.Move(endHandle, new Point(4, 0));
+                touch.Move(endHandle, new Point(-40, 0));
+
+                // Without the retry in SetPresenter the canvas keeps a null _textBox, both drag
+                // handlers bail, and the selection sits exactly where SelectAll left it.
+                Assert.True(textBox.SelectionEnd < 11,
+                    $"dragging the end handle left should have shrunk the selection, got " +
+                    $"[{textBox.SelectionStart}..{textBox.SelectionEnd}]");
+            }
+        }
+
+        [Fact]
         public void Dragging_The_End_Handle_Extends_The_Selection()
         {
             using (UnitTestApplication.Start(Services))

@@ -522,7 +522,20 @@ namespace Avalonia.Controls.Primitives
         internal void SetPresenter(TextPresenter? textPresenter)
         {
             if (_presenter == textPresenter)
+            {
+                // The presenter can reach us before it is attached to the tree: TextBox's
+                // OnApplyTemplate calls ShowCaret when the box is already focused, which is what
+                // happens when something focuses a TextBox that has never been measured - a field
+                // swapped in for a read-only placeholder, say. The ancestor walk below then finds
+                // no TextBox, and because this method returns early once the presenter matches, the
+                // canvas would keep a null _textBox for good. Both drag handlers are guarded on it,
+                // so the handles would still move under the finger while the caret and selection
+                // never budged. Retry the lookup instead.
+                if (_presenter != null && _textBox == null)
+                    AttachTextBox();
+
                 return;
+            }
 
             if (_presenter != null)
             {
@@ -551,13 +564,22 @@ namespace Avalonia.Controls.Primitives
                 _presenter.AddHandler(PointerPressedEvent, PresenterPressed, handledEventsToo: true);
                 _presenter.AddHandler(GotFocusEvent, PresenterFocused, handledEventsToo: true);
 
-                _textBox = _presenter.FindAncestorOfType<TextBox>();
+                AttachTextBox();
+            }
+        }
 
-                if (_textBox != null)
-                {
-                    _textBox.PropertyChanged += TextBox_PropertyChanged;
-                    _textBox.AddHandler(ScrollGestureEvent, TextBoxScrolling, handledEventsToo: true);
-                }
+        /// <summary>
+        /// Resolves the presenter's owning <see cref="TextBox"/> and hooks it up. Only ever called
+        /// with <see cref="_textBox"/> null, so it cannot double-subscribe.
+        /// </summary>
+        private void AttachTextBox()
+        {
+            _textBox = _presenter?.FindAncestorOfType<TextBox>();
+
+            if (_textBox != null)
+            {
+                _textBox.PropertyChanged += TextBox_PropertyChanged;
+                _textBox.AddHandler(ScrollGestureEvent, TextBoxScrolling, handledEventsToo: true);
             }
         }
 
