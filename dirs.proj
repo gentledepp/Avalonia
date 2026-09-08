@@ -19,6 +19,13 @@
     <ProjectReference Remove="samples/WinUIEmbedSample/*.csproj" Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(SkipBuildingIOS)' == 'True'">
+    <!-- Opt-in escape hatch. Avalonia.iOS also targets tvOS, so building it needs the tvos
+         workload installed. Set SkipBuildingIOS=True to produce a package set on a machine
+         that only has the android/ios workloads. Off by default - CI builds everything. -->
+    <ProjectReference Remove="src/iOS/**/*.*proj" />
+  </ItemGroup>
+
   <ItemGroup Condition="!$([MSBuild]::IsOsPlatform('Windows'))">
     <!-- Build mobile backends only on Windows, where we have installed android workload -->
     <ProjectReference Remove="src/Android/**/*.*proj" />
