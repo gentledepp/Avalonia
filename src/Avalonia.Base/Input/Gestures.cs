@@ -161,7 +161,12 @@ namespace Avalonia.Input
                     if (e.Pointer == s_gestureState?.Pointer && source is Interactive i)
                     {
                         var point = e.GetCurrentPoint((Visual)target);
-                        var holdSize = new Size(4, 4);
+                        var settings = i.GetPlatformSettings();
+                        // Use the platform tap size, the same tolerance PointerReleased uses to
+                        // decide a tap. Hard-coding 4 DIP made a hold far twitchier than a tap:
+                        // a finger that drifts 5 DIP during the hold wait cancelled the hold, so
+                        // long-press-to-select misfired constantly on touch (touch tap size is 10).
+                        var holdSize = settings?.GetTapSize(point.Pointer.Type) ?? new Size(4, 4);
                         var holdRect = new Rect(s_lastPressPoint, new Size())
                             .Inflate(new Thickness(holdSize.Width, holdSize.Height));
 

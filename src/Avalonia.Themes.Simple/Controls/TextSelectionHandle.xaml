@@ -68,7 +68,14 @@
       <Setter.Value>
         <ControlTemplate>
           <Grid>
-            <Border Padding="0,0,0,10" IsHitTestVisible="True" Background="Transparent">
+            <!-- The grabbable area is the control's own bounds - Avalonia hit-tests a templated
+                 control by its bounds, so anything that overflows them is not reachable. Pad the
+                 transparent border so the control itself measures ~48x48 (Android's minimum) and
+                 push PART_Indicator back onto the artwork's edge with a matching margin, so
+                 GetIndicatorOffset() still lands the teardrop tip exactly on the caret. The
+                 vertical growth is bottom-only: TextSelectionCanvas pins the control's TOP to the
+                 caret, so the artwork has to stay flush with the top. -->
+            <Border Padding="12,0,12,24" IsHitTestVisible="True" Background="Transparent">
               <Image Stretch="Uniform"
                      Cursor="Arrow"
                      Name="PART_HandlePathIcon"
@@ -98,9 +105,11 @@
     </Style>
     <Style Selector="^:end /template/ Border#PART_Indicator">
       <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="12,0,0,0" />
     </Style>
     <Style Selector="^:start /template/ Border#PART_Indicator">
       <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Margin" Value="0,0,12,0" />
     </Style>
   </ControlTheme>
 </ResourceDictionary>

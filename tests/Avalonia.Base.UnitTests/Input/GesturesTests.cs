@@ -461,6 +461,45 @@ namespace Avalonia.Base.UnitTests.Input
         }
 
         [Fact]
+        public void Touch_Hold_Should_Not_Be_Cancelled_By_Drift_Within_The_Platform_Tap_Size()
+        {
+            // The cancel tolerance has to be the platform's tap size - the same tolerance a tap is
+            // judged by - and not a hard-coded 4 DIP. A finger easily drifts more than 4 DIP during
+            // the hold wait, which cancelled the hold and made long-press-to-select misfire on any
+            // real touch screen. Touch tap size is 10 DIP; a mouse still gets 4, so the mouse
+            // behaviour pinned by Hold_Should_Be_Cancelled_When_Pointer_Moves_Too_Far is unchanged.
+            using var scope = AvaloniaLocator.EnterScope();
+            using var app = UnitTestApplication.Start();
+
+            var touch = new TouchTestHelper();
+            var border = new Border();
+            var root = new TestRoot
+            {
+                Child = border
+            };
+            var started = false;
+            var cancelled = false;
+
+            root.AddHandler(InputElement.HoldingEvent, (_, e) =>
+            {
+                started |= e.HoldingState == HoldingState.Started;
+                cancelled |= e.HoldingState == HoldingState.Canceled;
+            });
+
+            touch.Down(border);
+
+            var timer = Assert.Single(Dispatcher.SnapshotTimersForUnitTests());
+            timer.ForceFire();
+
+            Assert.True(started);
+
+            // Past the old hard-coded 4 DIP, comfortably inside the 10 DIP touch tap size.
+            touch.Move(border, new Point(7, 7));
+
+            Assert.False(cancelled);
+        }
+
+        [Fact]
         public void Hold_Should_Not_Be_Raised_For_Multiple_Contacts()
         {
             using var scope = AvaloniaLocator.EnterScope();
