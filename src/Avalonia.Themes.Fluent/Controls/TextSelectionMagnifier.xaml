@@ -1,0 +1,31 @@
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Android's Magnifier is 100x48dp at 1.25x; iOS' loupe is a little wider and rounder. These
+       split the difference so one look serves both. -->
+  <x:Double x:Key="TextSelectionMagnifierWidth">120</x:Double>
+  <x:Double x:Key="TextSelectionMagnifierHeight">48</x:Double>
+
+  <ControlTheme x:Key="{x:Type TextSelectionMagnifier}"
+                TargetType="TextSelectionMagnifier">
+    <Setter Property="Width" Value="{DynamicResource TextSelectionMagnifierWidth}" />
+    <Setter Property="Height" Value="{DynamicResource TextSelectionMagnifierHeight}" />
+    <Setter Property="Zoom" Value="1.25" />
+    <Setter Property="VerticalOffset" Value="12" />
+    <!-- The loupe follows a drag it must never intercept. -->
+    <Setter Property="IsHitTestVisible" Value="False" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Border Name="PART_Viewport"
+                  CornerRadius="8"
+                  BorderThickness="1"
+                  BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                  BoxShadow="0 2 8 0 #40000000">
+            <!-- Background is set in code to the VisualBrush over the TextPresenter. A Border fills
+                 its corner radius with Background, so the magnified image is rounded for free. -->
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

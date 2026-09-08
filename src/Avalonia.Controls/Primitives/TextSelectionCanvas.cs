@@ -9,6 +9,7 @@ using Avalonia.Layout;
 using Avalonia.Media.TextFormatting;
 using Avalonia.Reactive;
 using Avalonia.Threading;
+using Avalonia.Utilities;
 using Avalonia.VisualTree;
 using static Avalonia.Reactive.Disposable;
 
@@ -23,6 +24,7 @@ namespace Avalonia.Controls.Primitives
         private readonly TextSelectionHandle _caretHandle;
         private readonly TextSelectionHandle _handle1;
         private readonly TextSelectionHandle _handle2;
+        private readonly TextSelectionMagnifier _magnifier;
         private TextPresenter? _presenter;
         private TextBox? _textBox;
         private bool _showHandle;
@@ -45,6 +47,7 @@ namespace Avalonia.Controls.Primitives
                     _handle1.IsVisible = false;
                     _handle2.IsVisible = false;
                     _caretHandle.IsVisible = false;
+                    HideMagnifier();
                 }
 
                 IsVisible = !string.IsNullOrEmpty(_presenter?.Text) && value;
@@ -66,9 +69,17 @@ namespace Avalonia.Controls.Primitives
             _handle1.SelectionHandleType = SelectionHandleType.Start;
             _handle2.SelectionHandleType = SelectionHandleType.End;
 
+            _magnifier = new TextSelectionMagnifier
+            {
+                IsVisible = false,
+                // Never let the loupe eat the drag it is following.
+                IsHitTestVisible = false,
+            };
+
             Children.Add(_caretHandle);
             Children.Add(_handle1);
             Children.Add(_handle2);
+            Children.Add(_magnifier);
 
             _caretHandle.DragStarted += Handle_DragStarted;
             _caretHandle.DragDelta += CaretHandle_DragDelta;
@@ -132,6 +143,7 @@ namespace Avalonia.Controls.Primitives
             _saveSelectionEnd = _textBox?.SelectionEnd;
             _initialHandleType = (sender as TextSelectionHandle)?.SelectionHandleType;
             CloseFlyout();
+            UpdateMagnifier();
         }
 
         private void CloseFlyout()
@@ -144,6 +156,7 @@ namespace Avalonia.Controls.Primitives
             if (sender is TextSelectionHandle handle)
             {
                 DragSelectionHandle(handle);
+                UpdateMagnifier();
                 e.Handled = true;
             }
         }
@@ -163,6 +176,8 @@ namespace Avalonia.Controls.Primitives
 
                 var caretBound = _presenter.GetCursorRectangle();
                 _caretHandle.SetTopLeft(ToLayer(caretBound.BottomLeft));
+
+                UpdateMagnifier();
             }
         }
 
@@ -193,6 +208,8 @@ namespace Avalonia.Controls.Primitives
         {
             _savedSelectionStart = -1;
             _saveSelectionEnd = -1;
+
+            HideMagnifier();
 
             if (!_handle1.IsDragging)
             {
@@ -258,6 +275,57 @@ namespace Avalonia.Controls.Primitives
                         }, TimeSpan.FromSeconds(5), DispatcherPriority.Background);
                 }
             }
+        }
+
+        /// <summary>
+        /// Points the loupe at the caret and parks it above that line, centred on the caret and kept
+        /// inside the layer. Called while a handle is dragged; the caret has already been moved to the
+        /// dragged position by then, so it is the focus point for all three handles.
+        /// </summary>
+        private void UpdateMagnifier()
+        {
+            if (_presenter is not { } presenter || !ShowHandles)
+            {
+                HideMagnifier();
+                return;
+            }
+
+            var caret = presenter.GetCursorRectangle();
+
+            // Has to be visible before measuring: layout hands a hidden control a zero DesiredSize,
+            // so measuring it first would leave nothing to centre on and the loupe would never show.
+            _magnifier.IsVisible = true;
+
+            if (_magnifier.DesiredSize.Width <= 0 || _magnifier.DesiredSize.Height <= 0)
+                _magnifier.Measure(Size.Infinity);
+
+            var size = _magnifier.DesiredSize;
+            if (size.Width <= 0 || size.Height <= 0)
+            {
+                // No theme, no size - nothing to show.
+                _magnifier.IsVisible = false;
+                return;
+            }
+
+            _magnifier.Update(presenter, caret.Center);
+
+            // Sit above the magnified line, centred on the caret.
+            var anchor = ToLayer(new Point(caret.Center.X, caret.Top));
+            var left = anchor.X - size.Width / 2;
+            var top = anchor.Y - size.Height - _magnifier.VerticalOffset;
+
+            // Keep it on screen. The layer spans the top level, so its arranged size is the bound.
+            if (VisualParent is TextSelectorLayer { AvailableSize.Width: > 0 } layer)
+                left = MathUtilities.Clamp(left, 0, Math.Max(0, layer.AvailableSize.Width - size.Width));
+
+            SetLeft(_magnifier, left);
+            SetTop(_magnifier, Math.Max(0, top));
+        }
+
+        private void HideMagnifier()
+        {
+            if (_magnifier.IsVisible)
+                _magnifier.IsVisible = false;
         }
 
         private Point GetSearchPoint(TextSelectionHandle handle)
