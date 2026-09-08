@@ -16,13 +16,17 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate>
-          <Border Name="PART_Viewport"
-                  CornerRadius="8"
+          <!-- Opaque backing. The magnified image can be partly transparent - a text field with
+               no background of its own leaves the loupe see-through and unreadable - so the frame
+               paints a solid surface underneath it. Same brush the focused TextBox uses. -->
+          <Border CornerRadius="8"
                   BorderThickness="1"
                   BorderBrush="{DynamicResource ThemeBorderMidBrush}"
+                  Background="{DynamicResource ThemeBackgroundBrush}"
                   BoxShadow="0 2 8 0 #40000000">
-            <!-- Background is set in code to the VisualBrush over the TextPresenter. A Border fills
-                 its corner radius with Background, so the magnified image is rounded for free. -->
+            <!-- PART_Viewport's Background is set in code to the VisualBrush over the TextBox. A
+                 Border fills its corner radius with Background, so the image is rounded for free. -->
+            <Border Name="PART_Viewport" CornerRadius="7" />
           </Border>
         </ControlTemplate>
       </Setter.Value>

@@ -2,9 +2,11 @@
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
+using Avalonia.Data;
 using Avalonia.Harfbuzz;
 using Avalonia.Headless;
 using Avalonia.Input;
+using System.Collections.Generic;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.UnitTests;
@@ -180,11 +182,12 @@ namespace Avalonia.Controls.UnitTests
 
                 var brush = magnifier.SourceBrush;
 
-                // It magnifies the presenter itself, not a copy.
-                Assert.Same(presenter, brush.Visual);
+                // It magnifies the TextBox itself, not a copy - the box, because the presenter has
+                // no background of its own and a loupe over it comes out transparent.
+                Assert.Same(textBox, brush.Visual);
 
-                // The window is the viewport shrunk by the zoom, centred on the caret.
                 var caret = presenter.GetCursorRectangle();
+                var caretInBox = presenter.TranslatePoint(caret.Center, textBox)!.Value;
                 var source = brush.SourceRect.Rect;
 
                 Assert.Equal(RelativeUnit.Absolute, brush.SourceRect.Unit);
@@ -193,13 +196,13 @@ namespace Avalonia.Controls.UnitTests
                 Assert.Equal(magnifier.DesiredSize.Width / magnifier.Zoom, source.Width, 3);
                 Assert.Equal(magnifier.DesiredSize.Height / magnifier.Zoom, source.Height, 3);
 
-                // It never magnifies blank space past the edge of the text...
-                Assert.True(new Rect(presenter.Bounds.Size).Contains(source),
-                    $"source {source} escaped the presenter {presenter.Bounds}");
+                // It never magnifies blank space past the edge of the field...
+                Assert.True(new Rect(textBox.Bounds.Size).Contains(source),
+                    $"source {source} escaped the text box {textBox.Bounds}");
 
                 // ...and the caret is always inside what the user sees.
-                Assert.True(source.Contains(caret.Center),
-                    $"caret {caret.Center} is outside the magnified window {source}");
+                Assert.True(source.Contains(caretInBox),
+                    $"caret {caretInBox} is outside the magnified window {source}");
             }
         }
 
@@ -222,6 +225,36 @@ namespace Avalonia.Controls.UnitTests
 
                 Assert.NotNull(content);
                 Assert.Equal(presenter.Bounds.Size, content!.Rect.Size);
+                Assert.NotEqual(default, presenter.Bounds.Size);
+            }
+        }
+
+        [Fact]
+        public void Dragging_The_End_Handle_Extends_The_Selection()
+        {
+            using (UnitTestApplication.Start(Services))
+            {
+                var (_, textBox, _, canvas) = CreateDraggableSelection();
+
+                // Canvas children are caret, start, end - with a selection the caret one is hidden.
+                var handles = canvas.Children.OfType<TextSelectionHandle>().ToList();
+                Assert.False(handles[0].IsVisible);
+                var endHandle = handles[2];
+
+                var touch = new TouchTestHelper();
+                touch.Down(endHandle);
+
+                var seen = new List<int>();
+                for (var dx = 4; dx <= 28; dx += 8)
+                {
+                    touch.Move(endHandle, new Point(dx, 0));
+                    seen.Add(textBox.SelectionEnd);
+                }
+
+                // The anchor stays put and the far end follows the finger, growing monotonically.
+                Assert.Equal(0, textBox.SelectionStart);
+                Assert.Equal(seen.OrderBy(x => x), seen);
+                Assert.True(seen[^1] > 5, $"selection should have grown past 5, got [{string.Join(",", seen)}]");
             }
         }
 
@@ -234,7 +267,7 @@ namespace Avalonia.Controls.UnitTests
         {
             var textBox = new TextBox
             {
-                Template = TextBoxTests.CreateTemplate(),
+                Template = CreateTextBoxTemplateWithSelectionBindings(),
                 Text = "Hello world",
                 Width = 150
             };
@@ -281,6 +314,41 @@ namespace Avalonia.Controls.UnitTests
 
             magnifier.ApplyTemplate();
             topLevel.LayoutManager.ExecuteLayoutPass();
+        }
+
+        /// <summary>
+        /// Mirrors the real Fluent/Simple TextBox template: Text two-way, and CaretIndex,
+        /// SelectionStart and SelectionEnd as plain one-way template bindings.
+        /// <see cref="TextBoxTests.CreateTemplate"/> cannot be used here - it omits the selection
+        /// entirely and binds CaretIndex <b>two-way</b>, which no shipped theme does. That matters:
+        /// two-way would let a presenter caret move round-trip into TextBox.OnCaretIndexChanged,
+        /// which collapses the selection onto the caret, so a handle drag would appear broken purely
+        /// because of the harness.
+        /// </summary>
+        private static IControlTemplate CreateTextBoxTemplateWithSelectionBindings()
+        {
+            return new FuncControlTemplate<TextBox>((control, scope) =>
+                new ScrollViewer
+                {
+                    Name = "PART_ScrollViewer",
+                    Template = new FuncControlTemplate<ScrollViewer>(ScrollViewerTests.CreateTemplate),
+                    Content = new TextPresenter
+                    {
+                        Name = "PART_TextPresenter",
+                        [!!TextPresenter.TextProperty] = TemplateBinding(nameof(TextPresenter.Text), BindingMode.TwoWay),
+                        [!TextPresenter.CaretIndexProperty] = TemplateBinding(nameof(TextPresenter.CaretIndex), BindingMode.OneWay),
+                        [!TextPresenter.SelectionStartProperty] = TemplateBinding(nameof(TextPresenter.SelectionStart), BindingMode.OneWay),
+                        [!TextPresenter.SelectionEndProperty] = TemplateBinding(nameof(TextPresenter.SelectionEnd), BindingMode.OneWay),
+                    }.RegisterInNameScope(scope)
+                }.RegisterInNameScope(scope));
+
+            static Binding TemplateBinding(string path, BindingMode mode) => new()
+            {
+                Path = path,
+                Mode = mode,
+                Priority = BindingPriority.Template,
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent),
+            };
         }
 
         private class TestTopLevel(ITopLevelImpl impl) : TopLevel(impl)

@@ -307,7 +307,13 @@ namespace Avalonia.Controls.Primitives
                 return;
             }
 
-            _magnifier.Update(presenter, caret.Center);
+            // Magnify the TextBox, not the presenter: the presenter paints only text and the
+            // selection highlight, so a loupe over it came out transparent and unreadable. The box
+            // brings its own background and border along.
+            var source = (Visual?)_textBox ?? presenter;
+            var focus = presenter.TranslatePoint(caret.Center, source) ?? caret.Center;
+
+            _magnifier.Update(source, focus);
 
             // Sit above the magnified line, centred on the caret.
             var anchor = ToLayer(new Point(caret.Center.X, caret.Top));
