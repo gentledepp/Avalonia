@@ -234,50 +234,43 @@ namespace Avalonia.Controls.UnitTests
         }
 
         [Fact]
-        public void Appearing_Loupe_Lands_Immediately_Despite_A_Transition()
+        public void Magnifier_Follows_The_Finger_Between_Character_Positions()
         {
-            // A loupe that animated on appearing would slide in from wherever the previous drag
-            // left it, which is nowhere near the caret being magnified.
+            // The caret snaps to whole characters. If the loupe were pinned to it, it would sit
+            // still for several pointer moves and then jump - which is what a transition was
+            // covering up, at the cost of lagging badly on a fast drag. Following the finger is
+            // smooth without anything being animated.
             using (UnitTestApplication.Start(Services))
             {
-                var magnifier = new TextSelectionMagnifier
+                // Wide, with the selection well into the text: near an edge the loupe is clamped to
+                // stay on screen, which would hide the movement this test is about.
+                var (topLevel, textBox, _, canvas) = CreateDraggableSelection(
+                    text: "The quick brown fox jumps over the lazy dog", width: 600, selectionEnd: 20);
+                var magnifier = canvas.Children.OfType<TextSelectionMagnifier>().Single();
+                GiveMagnifierATemplate(magnifier, topLevel);
+
+                var handle = canvas.Children.OfType<TextSelectionHandle>().ToList()[2];
+                var touch = new TouchTestHelper();
+                touch.Down(handle);
+
+                var offsets = new List<double>();
+                var selections = new List<int>();
+
+                // One-pixel steps: far finer than a character, so the caret cannot keep up.
+                for (var dx = 1; dx <= 6; dx++)
                 {
-                    Transitions =
-                    [
-                        new TransformOperationsTransition
-                        {
-                            Property = Visual.RenderTransformProperty,
-                            Duration = TimeSpan.FromSeconds(10),
-                        }
-                    ]
-                };
+                    touch.Move(handle, new Point(dx, 0));
+                    var transform = Assert.IsType<TransformOperations>(magnifier.RenderTransform);
+                    offsets.Add(transform.Value.M31);
+                    selections.Add(textBox.SelectionEnd);
+                }
 
-                var transitions = magnifier.Transitions;
+                // The caret stalls on a character for at least one of these steps...
+                Assert.True(selections.Distinct().Count() < offsets.Count,
+                    $"precondition: the caret should lag the finger, got [{string.Join(",", selections)}]");
 
-                // Headless has no animation clock, so asserting the value alone proves nothing -
-                // it lands on target either way. What has to hold is that the transition is not
-                // attached at the moment the transform changes, which is the only way to set it
-                // without animating. Catch the state at exactly that moment.
-                Transitions? attachedDuringChange = transitions;
-                magnifier.PropertyChanged += (_, e) =>
-                {
-                    if (e.Property == Visual.RenderTransformProperty)
-                        attachedDuringChange = magnifier.Transitions;
-                };
-
-                magnifier.MoveTo(new Point(200, 100), animate: false);
-
-                Assert.Null(attachedDuringChange);
-                Assert.Same(transitions, magnifier.Transitions);
-
-                var landed = Assert.IsType<TransformOperations>(magnifier.RenderTransform);
-                Assert.Equal(200, landed.Value.M31, 3);
-                Assert.Equal(100, landed.Value.M32, 3);
-
-                // ...and the following case leaves the transition in place to do its job.
-                attachedDuringChange = null;
-                magnifier.MoveTo(new Point(300, 100), animate: true);
-                Assert.Same(transitions, attachedDuringChange);
+                // ...but the loupe moved on every single one.
+                Assert.Equal(offsets.Count, offsets.Distinct().Count());
             }
         }
 
@@ -396,18 +389,18 @@ namespace Avalonia.Controls.UnitTests
         /// and draggable.
         /// </summary>
         private static (TopLevel topLevel, TextBox textBox, TextPresenter presenter, TextSelectionHandleCanvas canvas)
-            CreateDraggableSelection()
+            CreateDraggableSelection(string text = "Hello world", double width = 150, int selectionEnd = 5)
         {
             var textBox = new TextBox
             {
                 Template = CreateTextBoxTemplateWithSelectionBindings(),
-                Text = "Hello world",
-                Width = 150
+                Text = text,
+                Width = width
             };
 
             var visualLayerManager = new VisualLayerManager
             {
-                Child = new Border { Width = 200, Height = 200, Child = textBox },
+                Child = new Border { Width = width + 50, Height = 200, Child = textBox },
                 EnableTextSelectorLayer = true
             };
 
@@ -421,7 +414,7 @@ namespace Avalonia.Controls.UnitTests
 
             textBox.Focus();
             textBox.SelectionStart = 0;
-            textBox.SelectionEnd = 5;
+            textBox.SelectionEnd = selectionEnd;
 
             var presenter = textBox.FindDescendantOfType<TextPresenter>()!;
             presenter.EnsureTextSelectionLayer();

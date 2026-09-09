@@ -500,6 +500,50 @@ namespace Avalonia.Base.UnitTests.Input
         }
 
         [Fact]
+        public void Hold_Should_Be_Cancelled_When_A_Scroll_Takes_The_Pointer()
+        {
+            // Widening the cancel tolerance to the platform tap size opened a band between the
+            // scroll threshold (half a tap size, so 5 DIP) and the hold tolerance (a whole one, 10)
+            // where the scroll was already running and the hold had not cancelled - so a context
+            // menu opened mid-scroll. A recognizer taking the pointer has to end the hold outright,
+            // whatever the distance.
+            using var scope = AvaloniaLocator.EnterScope();
+            using var app = UnitTestApplication.Start();
+
+            var touch = new TouchTestHelper();
+            var border = new Border();
+            border.GestureRecognizers.Add(new ScrollGestureRecognizer { CanVerticallyScroll = true });
+
+            // The recognizer only claims the pointer once something acts on the scroll.
+            border.AddHandler(InputElement.ScrollGestureEvent, (_, e) => e.Handled = true);
+
+            var root = new TestRoot
+            {
+                Child = border
+            };
+            var started = false;
+            var cancelled = false;
+
+            root.AddHandler(InputElement.HoldingEvent, (_, e) =>
+            {
+                started |= e.HoldingState == HoldingState.Started;
+                cancelled |= e.HoldingState == HoldingState.Canceled;
+            });
+
+            touch.Down(border);
+
+            var timer = Assert.Single(Dispatcher.SnapshotTimersForUnitTests());
+            timer.ForceFire();
+            Assert.True(started, "precondition: the hold fired before the finger moved");
+
+            // 8 DIP: past the 5 DIP scroll threshold, still inside the 10 DIP hold tolerance, so
+            // distance on its own would leave the hold alive.
+            touch.Move(border, new Point(0, 8));
+
+            Assert.True(cancelled, "a scroll taking the pointer must cancel the hold");
+        }
+
+        [Fact]
         public void Hold_Should_Not_Be_Raised_For_Multiple_Contacts()
         {
             using var scope = AvaloniaLocator.EnterScope();

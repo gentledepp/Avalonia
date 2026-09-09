@@ -155,8 +155,11 @@ namespace Avalonia.Controls.Primitives
         {
             if (sender is TextSelectionHandle handle)
             {
+                // Read the finger before DragSelectionHandle snaps the handle to a character.
+                var finger = ToPresenter(GetSearchPoint(handle));
+
                 DragSelectionHandle(handle);
-                UpdateMagnifier();
+                UpdateMagnifier(finger);
                 e.Handled = true;
             }
         }
@@ -167,6 +170,7 @@ namespace Avalonia.Controls.Primitives
             {
                 var indicatorPosition = GetSearchPoint(_caretHandle);
                 var point = ToPresenter(indicatorPosition);
+                var finger = point;
                 using var _ = BeginChange();
                 _presenter.MoveCaretToPoint(point);
                 var caretIndex = _presenter.CaretIndex;
@@ -177,7 +181,7 @@ namespace Avalonia.Controls.Primitives
                 var caretBound = _presenter.GetCursorRectangle();
                 _caretHandle.SetTopLeft(ToLayer(caretBound.BottomLeft));
 
-                UpdateMagnifier();
+                UpdateMagnifier(finger);
             }
         }
 
@@ -282,7 +286,7 @@ namespace Avalonia.Controls.Primitives
         /// inside the layer. Called while a handle is dragged; the caret has already been moved to the
         /// dragged position by then, so it is the focus point for all three handles.
         /// </summary>
-        private void UpdateMagnifier()
+        private void UpdateMagnifier(Point? finger = null)
         {
             if (_presenter is not { } presenter || !ShowHandles)
             {
@@ -292,10 +296,15 @@ namespace Avalonia.Controls.Primitives
 
             var caret = presenter.GetCursorRectangle();
 
+            // Follow the finger horizontally rather than the caret. The caret only moves in whole
+            // characters, so a loupe pinned to it hops from glyph to glyph; the finger is continuous,
+            // which is smooth without anything having to be animated - and animating instead means
+            // a fast scrub restarts the transition every few milliseconds, so the loupe crawls along
+            // at a fraction of the speed and looks stuck. Vertically stay on the caret's line.
+            var focus = new Point(finger?.X ?? caret.Center.X, caret.Center.Y);
+
             // Has to be visible before measuring: layout hands a hidden control a zero DesiredSize,
             // so measuring it first would leave nothing to centre on and the loupe would never show.
-            // Appearing versus following: only a loupe that is already on screen should glide.
-            var wasVisible = _magnifier.IsVisible;
             _magnifier.IsVisible = true;
 
             if (_magnifier.DesiredSize.Width <= 0 || _magnifier.DesiredSize.Height <= 0)
@@ -313,15 +322,15 @@ namespace Avalonia.Controls.Primitives
             // selection highlight, so a loupe over it came out transparent and unreadable. The box
             // brings its own background and border along.
             var source = (Visual?)_textBox ?? presenter;
-            var focus = presenter.TranslatePoint(caret.Center, source) ?? caret.Center;
+            var focusInSource = presenter.TranslatePoint(focus, source) ?? focus;
 
-            _magnifier.Update(source, focus);
+            _magnifier.Update(source, focusInSource);
 
             // Sit above the magnified line, centred on the caret. The control is larger than the
             // visible loupe - it carries a transparent gutter so the drop shadow has somewhere to
             // fall - so take that gutter out of the placement, or the loupe would float too high.
             var gutter = _magnifier.FrameMargin;
-            var anchor = ToLayer(new Point(caret.Center.X, caret.Top));
+            var anchor = ToLayer(new Point(focus.X, caret.Top));
             var left = anchor.X - size.Width / 2 + (gutter.Right - gutter.Left) / 2;
             var top = anchor.Y - size.Height - _magnifier.VerticalOffset + gutter.Bottom;
 
@@ -329,7 +338,7 @@ namespace Avalonia.Controls.Primitives
             if (VisualParent is TextSelectorLayer { AvailableSize.Width: > 0 } layer)
                 left = MathUtilities.Clamp(left, 0, Math.Max(0, layer.AvailableSize.Width - size.Width));
 
-            _magnifier.MoveTo(new Point(left, Math.Max(0, top)), animate: wasVisible);
+            _magnifier.MoveTo(new Point(left, Math.Max(0, top)));
         }
 
         private void HideMagnifier()

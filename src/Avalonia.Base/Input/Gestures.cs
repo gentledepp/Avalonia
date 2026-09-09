@@ -150,6 +150,23 @@ namespace Avalonia.Input
             }
         }
 
+        /// <summary>
+        /// Drops a pending or running hold, telling anyone listening that it was cancelled.
+        /// </summary>
+        private static void CancelHold(Interactive source, PointerEventArgs e)
+        {
+            if (s_gestureState is { Type: GestureStateType.Holding } holding)
+            {
+                Holding?.Invoke(source, new HoldingRoutedEventArgs(
+                    HoldingState.Canceled, s_lastPressPoint, holding.Pointer.Type, e));
+            }
+
+            s_holdCancellationToken?.Cancel();
+            s_holdCancellationToken?.Dispose();
+            s_holdCancellationToken = null;
+            s_gestureState = null;
+        }
+
         private static void PointerMoved(RoutedEventArgs ev)
         {
             if (ev.Route == RoutingStrategies.Bubble)
@@ -160,6 +177,18 @@ namespace Avalonia.Input
                 {
                     if (e.Pointer == s_gestureState?.Pointer && source is Interactive i)
                     {
+                        // A gesture recognizer taking the pointer - a scroll, nearly always - ends
+                        // the hold however little the finger has travelled: what is under way is a
+                        // scroll, not a hold. Distance alone cannot decide this, because
+                        // ScrollGestureRecognizer starts at half the tap size while the hold
+                        // tolerates a whole one, so there is a band where both would be live and
+                        // the context menu opens mid-scroll.
+                        if (e.Pointer is Pointer { CapturedGestureRecognizer: not null })
+                        {
+                            CancelHold(i, e);
+                            return;
+                        }
+
                         var point = e.GetCurrentPoint((Visual)target);
                         var settings = i.GetPlatformSettings();
                         // Use the platform tap size, the same tolerance PointerReleased uses to
@@ -175,15 +204,7 @@ namespace Avalonia.Input
                             return;
                         }
 
-                        if (s_gestureState.Value.Type == GestureStateType.Holding)
-                        {
-                            Holding?.Invoke(i, new HoldingRoutedEventArgs(HoldingState.Canceled, s_lastPressPoint, s_gestureState.Value.Pointer.Type, e));
-                        }
-
-                        s_holdCancellationToken?.Cancel();
-                        s_holdCancellationToken?.Dispose();
-                        s_holdCancellationToken = null;
-                        s_gestureState = null;
+                        CancelHold(i, e);
                     }
                 }
             }
