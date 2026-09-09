@@ -1,5 +1,6 @@
 using Avalonia.Controls.Metadata;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Utilities;
 
 namespace Avalonia.Controls.Primitives
@@ -116,6 +117,35 @@ namespace Avalonia.Controls.Primitives
             // The brush snapshots the presenter when the render data is built, so the loupe only
             // picks up caret/selection changes if we ask for a repaint.
             InvalidateVisual();
+        }
+
+        /// <summary>
+        /// Moves the loupe to <paramref name="position"/> in its parent's coordinates.
+        /// </summary>
+        /// <param name="animate">
+        /// Whether to let the theme's transition carry it there. The caret moves in whole
+        /// characters, so following it verbatim makes the loupe jump from glyph to glyph; a short
+        /// transition smooths that out. Pass false when the loupe is appearing, or it would slide in
+        /// from wherever the previous drag left it.
+        /// </param>
+        internal void MoveTo(Point position, bool animate)
+        {
+            var builder = TransformOperations.CreateBuilder(1);
+            builder.AppendTranslate(position.X, position.Y);
+            var target = builder.Build();
+
+            if (animate)
+            {
+                RenderTransform = target;
+                return;
+            }
+
+            // Transitions run off property changes, so the only way to set one without animating is
+            // to have none attached at the moment it changes.
+            var transitions = Transitions;
+            Transitions = null;
+            RenderTransform = target;
+            Transitions = transitions;
         }
 
         /// <summary>

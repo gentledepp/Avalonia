@@ -19,6 +19,16 @@
     <Setter Property="VerticalOffset" Value="12" />
     <!-- The loupe follows a drag it must never intercept. -->
     <Setter Property="IsHitTestVisible" Value="False" />
+    <!-- The caret moves a whole character at a time, so a loupe pinned straight to it hops from
+         glyph to glyph. Gliding over the gap reads as following the finger instead. Short enough
+         not to lag behind the drag; on RenderTransform, so it runs on the compositor. -->
+    <Setter Property="Transitions">
+      <Transitions>
+        <TransformOperationsTransition Property="RenderTransform"
+                                       Duration="0:0:0.1"
+                                       Easing="CubicEaseOut" />
+      </Transitions>
+    </Setter>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate>

@@ -294,6 +294,8 @@ namespace Avalonia.Controls.Primitives
 
             // Has to be visible before measuring: layout hands a hidden control a zero DesiredSize,
             // so measuring it first would leave nothing to centre on and the loupe would never show.
+            // Appearing versus following: only a loupe that is already on screen should glide.
+            var wasVisible = _magnifier.IsVisible;
             _magnifier.IsVisible = true;
 
             if (_magnifier.DesiredSize.Width <= 0 || _magnifier.DesiredSize.Height <= 0)
@@ -327,8 +329,7 @@ namespace Avalonia.Controls.Primitives
             if (VisualParent is TextSelectorLayer { AvailableSize.Width: > 0 } layer)
                 left = MathUtilities.Clamp(left, 0, Math.Max(0, layer.AvailableSize.Width - size.Width));
 
-            SetLeft(_magnifier, left);
-            SetTop(_magnifier, Math.Max(0, top));
+            _magnifier.MoveTo(new Point(left, Math.Max(0, top)), animate: wasVisible);
         }
 
         private void HideMagnifier()

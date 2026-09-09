@@ -1,13 +1,16 @@
 ﻿using System.Linq;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
+using Avalonia.Animation;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Harfbuzz;
 using Avalonia.Headless;
 using Avalonia.Input;
+using System;
 using System.Collections.Generic;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Platform;
 using Avalonia.UnitTests;
 using Avalonia.VisualTree;
@@ -205,6 +208,76 @@ namespace Avalonia.Controls.UnitTests
                 // ...and the caret is always inside what the user sees.
                 Assert.True(source.Contains(caretInBox),
                     $"caret {caretInBox} is outside the magnified window {source}");
+            }
+        }
+
+        [Fact]
+        public void Magnifier_Is_Placed_By_RenderTransform_Not_By_Canvas_Left()
+        {
+            // Placement has to go through RenderTransform: that is what the theme's transition
+            // animates, and what the compositor can animate off the UI thread.
+            using (UnitTestApplication.Start(Services))
+            {
+                var (topLevel, _, _, canvas) = CreateDraggableSelection();
+                var magnifier = canvas.Children.OfType<TextSelectionMagnifier>().Single();
+                GiveMagnifierATemplate(magnifier, topLevel);
+
+                var handle = canvas.Children.OfType<TextSelectionHandle>().First(h => h.IsVisible);
+                var touch = new TouchTestHelper();
+                touch.Down(handle);
+                touch.Move(handle, new Point(4, 0));
+
+                Assert.IsType<TransformOperations>(magnifier.RenderTransform);
+                Assert.True(double.IsNaN(Canvas.GetLeft(magnifier)) || Canvas.GetLeft(magnifier) == 0,
+                    "Canvas.Left must stay untouched, or it would fight the transform");
+            }
+        }
+
+        [Fact]
+        public void Appearing_Loupe_Lands_Immediately_Despite_A_Transition()
+        {
+            // A loupe that animated on appearing would slide in from wherever the previous drag
+            // left it, which is nowhere near the caret being magnified.
+            using (UnitTestApplication.Start(Services))
+            {
+                var magnifier = new TextSelectionMagnifier
+                {
+                    Transitions =
+                    [
+                        new TransformOperationsTransition
+                        {
+                            Property = Visual.RenderTransformProperty,
+                            Duration = TimeSpan.FromSeconds(10),
+                        }
+                    ]
+                };
+
+                var transitions = magnifier.Transitions;
+
+                // Headless has no animation clock, so asserting the value alone proves nothing -
+                // it lands on target either way. What has to hold is that the transition is not
+                // attached at the moment the transform changes, which is the only way to set it
+                // without animating. Catch the state at exactly that moment.
+                Transitions? attachedDuringChange = transitions;
+                magnifier.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == Visual.RenderTransformProperty)
+                        attachedDuringChange = magnifier.Transitions;
+                };
+
+                magnifier.MoveTo(new Point(200, 100), animate: false);
+
+                Assert.Null(attachedDuringChange);
+                Assert.Same(transitions, magnifier.Transitions);
+
+                var landed = Assert.IsType<TransformOperations>(magnifier.RenderTransform);
+                Assert.Equal(200, landed.Value.M31, 3);
+                Assert.Equal(100, landed.Value.M32, 3);
+
+                // ...and the following case leaves the transition in place to do its job.
+                attachedDuringChange = null;
+                magnifier.MoveTo(new Point(300, 100), animate: true);
+                Assert.Same(transitions, attachedDuringChange);
             }
         }
 
