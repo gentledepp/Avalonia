@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -2384,6 +2384,22 @@ namespace Avalonia.Controls
             var textLine = _presenter.TextLayout.TextLines[lineIndex];
             _presenter.MoveCaretToTextPosition(textLine.FirstTextSourceIndex);
 
+        }
+
+        /// <summary>
+        /// Re-shows the touch selection handles and their context menu for whatever is currently
+        /// selected, positioned over the selection.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing unless the text box is already in touch selection mode, so a mouse user
+        /// never sees a menu appear on its own. Intended for a command that changes the selection
+        /// from inside that menu - Select all, say - because running the command closes the menu
+        /// that hosted it, leaving the new selection with nothing to act on.
+        /// </remarks>
+        public void ShowTouchSelectionMenu()
+        {
+            _presenter?.EnsureTextSelectionLayer();
+            _presenter?.TextSelectionHandleCanvas?.Show();
         }
 
         /// <summary>

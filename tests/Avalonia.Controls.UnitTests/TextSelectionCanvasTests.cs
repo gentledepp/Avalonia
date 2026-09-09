@@ -275,6 +275,43 @@ namespace Avalonia.Controls.UnitTests
         }
 
         [Fact]
+        public void ShowTouchSelectionMenu_Brings_The_Handles_Back_When_In_Touch_Mode()
+        {
+            // Running a command from the touch context menu closes that menu, so the caller needs a
+            // way to put the selection UI back for the selection the command just made.
+            using (UnitTestApplication.Start(Services))
+            {
+                var (topLevel, textBox, _, canvas) = CreateDraggableSelection();
+
+                canvas.ShowHandles = false;
+                topLevel.LayoutManager.ExecuteLayoutPass();
+                Assert.DoesNotContain(canvas.Children.OfType<TextSelectionHandle>(), h => h.IsVisible);
+
+                textBox.ShowTouchSelectionMenu();
+                topLevel.LayoutManager.ExecuteLayoutPass();
+
+                Assert.Contains(canvas.Children.OfType<TextSelectionHandle>(), h => h.IsVisible);
+            }
+        }
+
+        [Fact]
+        public void ShowTouchSelectionMenu_Does_Nothing_For_A_Mouse_User()
+        {
+            // A menu appearing on its own would be wrong with a mouse; there the flyout is opened by
+            // the right-click that ran the command in the first place.
+            using (UnitTestApplication.Start(Services))
+            {
+                var (topLevel, textBox, _, canvas) = CreateDraggableSelection(forceTouchMode: false);
+
+                textBox.ShowTouchSelectionMenu();
+                topLevel.LayoutManager.ExecuteLayoutPass();
+
+                Assert.False(canvas.ShowHandles);
+                Assert.DoesNotContain(canvas.Children.OfType<TextSelectionHandle>(), h => h.IsVisible);
+            }
+        }
+
+        [Fact]
         public void Magnifier_Brush_Renders_An_Attached_Presenter()
         {
             // The whole feature rests on VisualBrush being able to draw a visual that is live in the
@@ -389,7 +426,8 @@ namespace Avalonia.Controls.UnitTests
         /// and draggable.
         /// </summary>
         private static (TopLevel topLevel, TextBox textBox, TextPresenter presenter, TextSelectionHandleCanvas canvas)
-            CreateDraggableSelection(string text = "Hello world", double width = 150, int selectionEnd = 5)
+            CreateDraggableSelection(string text = "Hello world", double width = 150, int selectionEnd = 5,
+                bool forceTouchMode = true)
         {
             var textBox = new TextBox
             {
@@ -420,7 +458,7 @@ namespace Avalonia.Controls.UnitTests
             presenter.EnsureTextSelectionLayer();
 
             var canvas = presenter.TextSelectionHandleCanvas!;
-            canvas.Show(forceTouchMode: true);
+            canvas.Show(forceTouchMode);
 
             topLevel.LayoutManager.ExecuteLayoutPass();
 
