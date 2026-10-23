@@ -1499,7 +1499,11 @@ namespace Avalonia.Controls
                     // to stop the ScrollViewer from seeing oscillating extents.
                     // The frozen value will converge toward reality once measurements
                     // stabilize.
-                    _frozenExtentU = previousExtent;
+                    // Never freeze below the extent just measured: when the reversal is a
+                    // growth (an item at the end shrank and grew back, e.g. an image that was
+                    // reloaded), the previous extent cuts that content off - and as nothing
+                    // measures again, the "growing is always safe" path above never runs.
+                    _frozenExtentU = Math.Max(previousExtent, currentExtentU);
                     _lastMeasuredExtentU = _frozenExtentU;
                     _frozenLastActualExtentU = currentExtentU;
                     _frozenStableCount = 0;

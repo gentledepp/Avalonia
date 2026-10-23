@@ -4858,6 +4858,45 @@ namespace Avalonia.Controls.UnitTests
             return (double)field!.GetValue(panel)!;
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Last_Item_Shrinking_And_Growing_Again_Stays_Reachable(bool layoutAfterShrinking)
+        {
+            // An item at the end of the list whose content is reloaded - an image that is detached
+            // and attached again - shrinks and then grows. The growth reverses the direction of the
+            // extent change, which freezes the extent. It used to freeze at the previous, smaller
+            // extent and nothing measured again, so the end of the grown item could not be scrolled to.
+            using var app = App();
+
+            var items = new double[] { 9, 13, 23, 12, 12, 13, 13, 13, 12, 13 }
+                .Select((h, i) => new ItemWithHeight(i, h))
+                .ToList();
+
+            var (target, scroll, _) = CreateTarget(
+                items: items,
+                itemTemplate: CanvasWithHeightTemplate,
+                bufferFactor: 0.5d);
+
+            scroll.Offset = new Vector(0, 1000);
+            Layout(target);
+
+            items[^1].Height = 0;
+            if (layoutAfterShrinking)
+                Layout(target);
+            items[^1].Height = 49;
+            Layout(target);
+            Layout(target);
+
+            var contentEnd = target.GetRealizedContainers()!
+                .Where(x => x.IsVisible)
+                .Max(x => x.Bounds.Bottom);
+
+            Assert.True(scroll.Extent.Height >= contentEnd - 0.5,
+                $"The last item ends at {contentEnd}, but the extent is only {scroll.Extent.Height} " +
+                $"(frozen extent {GetFrozenExtent(target)}): the end of the list cannot be scrolled to.");
+        }
+
         [Fact]
         public void Anchor_Self_Size_Change_During_Frozen_Extent_Compensates_StartU()
         {
