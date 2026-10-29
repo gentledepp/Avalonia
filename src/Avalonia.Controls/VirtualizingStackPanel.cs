@@ -1660,8 +1660,9 @@ namespace Avalonia.Controls
                 var e = GetOrCreateElement(items, index);
                 _realizingElement = e;
 
-                if (!e.IsMeasureValid)
-                    e.Measure(availableSize);
+                // Always call Measure: it is a no-op for a valid element with an unchanged
+                // constraint, but a valid element must still see a new cross-axis size.
+                e.Measure(availableSize);
 
                 var sizeU = horizontal ? e.DesiredSize.Width : e.DesiredSize.Height;
                 sizeU = AdjustElementSize(index, sizeU);
@@ -1699,8 +1700,7 @@ namespace Avalonia.Controls
                     var e = GetOrCreateElement(items, index);
                     _realizingElement = e;
 
-                    if (!e.IsMeasureValid)
-                        e.Measure(availableSize);
+                    e.Measure(availableSize);
 
                     var sizeU = horizontal ? e.DesiredSize.Width : e.DesiredSize.Height;
                     sizeU = AdjustElementSize(index, sizeU);
@@ -1734,8 +1734,7 @@ namespace Avalonia.Controls
             {
                 var e = GetOrCreateElement(items, index);
 
-                if (!e.IsMeasureValid)
-                    e.Measure(availableSize);
+                e.Measure(availableSize);
                 var sizeU = horizontal ? e.DesiredSize.Width : e.DesiredSize.Height;
                 sizeU = AdjustElementSize(index, sizeU);
                 var sizeV = horizontal ? e.DesiredSize.Height : e.DesiredSize.Width;

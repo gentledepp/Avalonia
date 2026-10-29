@@ -441,18 +441,8 @@ namespace Avalonia.Controls.Utils
         }
 
         /// <summary>
-        /// Validates that <see cref="StartU"/> is still valid.
-        /// </summary>
-        /// <param name="orientation">The panel orientation.</param>
-        /// <remarks>
-        /// Checks if any realized element's DesiredSize differs from the stored size.
-        /// - Small changes (&lt; 1px): absorbed silently by updating stored sizes. StartU stays stable.
-        ///   This prevents layout cycles with complex items that produce slightly different sizes each measure.
-        /// - Large changes (&gt;= 1px): genuine resize — marks StartU as unstable.
-        /// </remarks>
-        /// <summary>
-        /// Checks whether any realized element's DesiredSize has changed from the stored size.
-        /// Returns true if a significant (>= 1px) change was detected.
+        /// Validates that <see cref="StartU"/> is still valid, checking whether any realized element's
+        /// DesiredSize has changed from the stored size.
         /// When <paramref name="anchorIndex"/> is provided and only items OUTSIDE the viewport
         /// changed size (the anchor item itself is stable), compensates StartU by the accumulated
         /// pre-anchor delta to prevent scroll jumping from async content loading.
@@ -461,6 +451,17 @@ namespace Avalonia.Controls.Utils
         /// When lockSizes is true (during extent oscillation), stored sizes are NOT updated for
         /// significant changes, preventing item position shifts within the viewport.
         /// </summary>
+        /// <param name="orientation">The panel orientation.</param>
+        /// <param name="anchorIndex">The index of the anchor item, or -1 if none.</param>
+        /// <param name="preDelta">The accumulated size delta of items before the anchor.</param>
+        /// <param name="lockSizes">When true, stored sizes are not updated for significant changes.</param>
+        /// <returns>True if a significant (&gt;= 1px) change was detected.</returns>
+        /// <remarks>
+        /// Checks if any realized element's DesiredSize differs from the stored size.
+        /// - Small changes (&lt; 1px): absorbed silently by updating stored sizes. StartU stays stable.
+        ///   This prevents layout cycles with complex items that produce slightly different sizes each measure.
+        /// - Large changes (&gt;= 1px): genuine resize — marks StartU as unstable.
+        /// </remarks>
         public bool ValidateStartU(Orientation orientation, int anchorIndex, out double preDelta, bool lockSizes = false)
         {
             preDelta = 0;

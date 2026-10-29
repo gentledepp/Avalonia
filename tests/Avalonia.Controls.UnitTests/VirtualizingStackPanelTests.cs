@@ -753,6 +753,26 @@ namespace Avalonia.Controls.UnitTests
             Assert.Equal(firstBefore, firstAfter);
         }
 
+        [Fact]
+        public void Changing_Cross_Axis_Size_Remeasures_Realized_Elements()
+        {
+            // Regression test: realized elements whose measure was still valid were skipped,
+            // so a new width (rotation, a side pane collapsing) never reached them. They kept
+            // the size they were measured with - e.g. an image measured in a transiently narrow
+            // pass stayed tiny after the panel was arranged at its real width.
+            using var app = App();
+
+            var (target, _, _) = CreateTarget(bufferFactor: 0);
+            var root = (TestRoot)target.GetVisualRoot()!;
+
+            root.ClientSize = new Size(200, 100);
+            root.InvalidateMeasure();
+            Layout(target);
+
+            Assert.All(target.GetRealizedContainers()!, x =>
+                Assert.Equal(200, LayoutInformation.GetPreviousMeasureConstraint(x)!.Value.Width));
+        }
+
         [Theory]
         [InlineData(0d, 10, "4,9")]
         [InlineData(0.5d, 20, "4,9,14,19")]
