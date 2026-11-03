@@ -218,6 +218,11 @@ namespace Avalonia.Controls
 
         internal void Refresh() => OnItemsControlItemsChanged(null, CollectionUtils.ResetEventArgs);
 
+        internal ItemsControl? GetItemsControl() => ItemsControl;
+        internal IReadOnlyList<object?> GetItems() => Items;
+        internal void AddPooledChild(Control control) => AddInternalChild(control);
+        internal void RemovePooledChild(Control control) => RemoveInternalChild(control);
+
         private ItemsControl EnsureItemsControl()
         {
             if (ItemsControl is null)
