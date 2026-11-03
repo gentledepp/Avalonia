@@ -945,8 +945,11 @@ namespace Avalonia.Controls
             if (_templateCache.TryGetValue(itemType, out var cachedTemplate))
                 return cachedTemplate;
 
-            // Not in cache - need to find it (this may walk the tree)
-            var template = container.FindDataTemplate(item, null);
+            // Not in cache - need to find it (this may walk the tree). A virtualizing panel can
+            // prepare a new container before it adds it to the logical tree.
+            var template = container.GetLogicalParent() is null ?
+                this.FindDataTemplate(item, null) :
+                container.FindDataTemplate(item, null);
 
             // Cache the result for this type
             _templateCache[itemType] = template;
