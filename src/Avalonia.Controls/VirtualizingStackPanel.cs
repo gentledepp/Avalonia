@@ -18,7 +18,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Arranges and virtualizes content on a single line that is oriented either horizontally or vertically.
     /// </summary>
-    public class VirtualizingStackPanel : VirtualizingPanel, IScrollSnapPointsInfo
+    public class VirtualizingStackPanel : VirtualizingPanel, IScrollSnapPointsInfo, IContentRecyclingPanel
     {
         /// <summary>
         /// Defines the <see cref="Orientation"/> property.
