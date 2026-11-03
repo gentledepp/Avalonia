@@ -1090,6 +1090,20 @@ namespace Avalonia.Controls.UnitTests
             Assert.Null(container.Content);
         }
 
+        [Fact]
+        public void Virtualized_Container_Gets_ContentTemplate_From_DataTemplates()
+        {
+            using var app = Start();
+            var template = new TypedRecyclingTemplate();
+            var target = CreateTarget(
+                itemsSource: new[] { "foo", "bar" },
+                dataTemplates: new[] { template },
+                itemsPanel: new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()));
+
+            Assert.Same(template, GetContainer(target, 0).ContentTemplate);
+            Assert.Same(template, GetContainer(target, 1).ContentTemplate);
+        }
+
         private static ItemsControl CreateTarget(
             object? dataContext = null,
             BindingBase? displayMemberBinding = null,
@@ -1302,6 +1316,14 @@ namespace Avalonia.Controls.UnitTests
 
         private class ContentRecyclingStackPanel : StackPanel, IContentRecyclingPanel
         {
+        }
+
+        private class TypedRecyclingTemplate : IRecyclingDataTemplate, ITypedDataTemplate
+        {
+            public Type DataType => typeof(string);
+            public bool Match(object? data) => data is string;
+            public Control? Build(object? data) => Build(data, null);
+            public Control? Build(object? data, Control? existing) => existing ?? new Canvas();
         }
 
         private class VirtualizingTemplate : FuncDataTemplate<string>, IVirtualizingDataTemplate
