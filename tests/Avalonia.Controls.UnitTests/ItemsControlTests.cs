@@ -1054,6 +1054,42 @@ namespace Avalonia.Controls.UnitTests
             Assert.Equal("foo", item.Content);
         }
 
+        [Fact]
+        public void Content_Recycling_Panel_Gets_Typed_Recycle_Key_And_Keeps_Content()
+        {
+            using var app = Start();
+            var target = CreateTarget(
+                itemsSource: new[] { "foo" },
+                itemTemplate: new VirtualizingTemplate(),
+                itemsPanel: new FuncTemplate<Panel?>(() => new ContentRecyclingStackPanel()));
+            var container = GetContainer(target);
+
+            Assert.True(target.ItemContainerGenerator.NeedsContainer("foo", 0, out var recycleKey));
+            Assert.Equal("key", recycleKey);
+
+            target.ItemContainerGenerator.ClearItemContainer(container);
+
+            Assert.Equal("foo", container.Content);
+        }
+
+        [Fact]
+        public void Other_Panel_Gets_Default_Recycle_Key_And_Clears_Content()
+        {
+            using var app = Start();
+            var target = CreateTarget(
+                itemsSource: new[] { "foo" },
+                itemTemplate: new VirtualizingTemplate(),
+                itemsPanel: new FuncTemplate<Panel?>(() => new StackPanel()));
+            var container = GetContainer(target);
+
+            Assert.True(target.ItemContainerGenerator.NeedsContainer("foo", 0, out var recycleKey));
+            Assert.NotEqual("key", recycleKey);
+
+            target.ItemContainerGenerator.ClearItemContainer(container);
+
+            Assert.Null(container.Content);
+        }
+
         private static ItemsControl CreateTarget(
             object? dataContext = null,
             BindingBase? displayMemberBinding = null,
@@ -1262,6 +1298,22 @@ namespace Avalonia.Controls.UnitTests
         private class ContainerControl : ContentControl
         {
             protected override Type StyleKeyOverride => typeof(ContentControl);
+        }
+
+        private class ContentRecyclingStackPanel : StackPanel, IContentRecyclingPanel
+        {
+        }
+
+        private class VirtualizingTemplate : FuncDataTemplate<string>, IVirtualizingDataTemplate
+        {
+            public VirtualizingTemplate()
+                : base((_, _) => new Canvas(), supportsRecycling: true)
+            {
+            }
+
+            public object? GetKey(object? data) => "key";
+            public int MaxPoolSizePerKey => 5;
+            public int MinPoolSizePerKey => 0;
         }
 
         private record Item(string Caption, string? Value = null);
