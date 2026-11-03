@@ -3283,6 +3283,34 @@ namespace Avalonia.Controls.UnitTests
         }
 
         [Fact]
+        public void Container_Over_MaxPoolSizePerKey_Is_Removed_From_Children()
+        {
+            using var app = App();
+
+            var items = new ObservableCollection<object>(
+                Enumerable.Range(0, 100).Select(i =>
+                    (object)new TypeA_Item { Name = $"A{i}" }));
+
+            var template = new FuncVirtualizingDataTemplate<object>((item, _) =>
+                new Canvas { Width = 100, Height = 10 })
+            {
+                MaxPoolSizePerKey = 2
+            };
+
+            var (target, scroll, _) = CreateTarget(
+                items: items,
+                itemTemplate: template);
+
+            Assert.True(target.GetRealizedContainers()!.Count() > 2);
+
+            scroll.Offset = new Vector(0, 500);
+            Layout(target);
+
+            var hidden = target.Children.Count(x => !x.IsVisible);
+            Assert.True(hidden <= 2, $"{hidden} hidden children, expected <= 2");
+        }
+
+        [Fact]
         public void Recycled_Container_Gets_New_DataContext_When_Type_Matches()
         {
             using var app = App();

@@ -164,7 +164,8 @@ namespace Avalonia.Controls
         /// </summary>
         /// <param name="container">A container created by <see cref="CreateContainer"/>.</param>
         /// <remarks>
-        /// A container without a recycle key is removed from the panel's children.
+        /// A container without a recycle key, or whose pool is full, is removed from the panel's
+        /// children.
         /// </remarks>
         public void RecycleContainer(Control container)
         {
@@ -177,8 +178,11 @@ namespace Avalonia.Controls
             }
 
             _owner.ItemContainerGenerator!.ClearItemContainer(container);
-            PushToRecyclePool(recycleKey, container);
-            container.SetCurrentValue(Visual.IsVisibleProperty, false);
+
+            if (PushToRecyclePool(recycleKey, container))
+                container.SetCurrentValue(Visual.IsVisibleProperty, false);
+            else
+                _owner.RemovePooledChild(container);
         }
 
         /// <summary>
@@ -425,8 +429,10 @@ namespace Avalonia.Controls
                         // When reused, only the data binding will update (cheap operation).
 
                         // Push to recycle pool - container + child are pooled together
-                        PushToRecyclePool(recycleKey, container);
-                        container.SetCurrentValue(Visual.IsVisibleProperty, false);
+                        if (PushToRecyclePool(recycleKey, container))
+                            container.SetCurrentValue(Visual.IsVisibleProperty, false);
+                        else
+                            _owner.RemovePooledChild(container);
                     }
                     catch
                     {
@@ -438,7 +444,7 @@ namespace Avalonia.Controls
             _isWarmupComplete = true;
         }
 
-        private void PushToRecyclePool(object recycleKey, Control element)
+        private bool PushToRecyclePool(object recycleKey, Control element)
         {
             _recyclePool ??= new();
 
@@ -451,9 +457,10 @@ namespace Avalonia.Controls
             // respect max poolsize per key of IVirtualizingDataTemplate
             if (ItemsControl?.ItemTemplate is IVirtualizingDataTemplate vdt &&
                 pool.Count >= vdt.MaxPoolSizePerKey)
-                return;
+                return false;
 
             pool.Add(element);
+            return true;
         }
 
         /// <summary>
