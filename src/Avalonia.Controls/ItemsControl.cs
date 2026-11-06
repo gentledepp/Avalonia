@@ -796,6 +796,19 @@ namespace Avalonia.Controls
         {
             Presenter = presenter;
             _childIndexChanged?.Invoke(this, ChildIndexChangedEventArgs.ChildIndexesReset);
+            ItemsPanelRootChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Raised when <see cref="ItemsPanelRoot"/> may have changed (the presenter or its panel), for
+        /// <see cref="ItemsScroll"/>.
+        /// </summary>
+        internal event EventHandler? ItemsPanelRootChanged;
+
+        internal void RaiseItemsPanelRootChanged(ItemsPresenter presenter)
+        {
+            if (presenter == Presenter)
+                ItemsPanelRootChanged?.Invoke(this, EventArgs.Empty);
         }
 
         internal void PrepareItemContainer(Control container, object? item, int index)
