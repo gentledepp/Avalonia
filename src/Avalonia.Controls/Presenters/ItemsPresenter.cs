@@ -109,11 +109,17 @@ namespace Avalonia.Controls.Presenters
                 else
                     CreateSimplePanelGenerator();
 
+                var wasLogical = _logicalScrollable is not null;
                 _logicalScrollable = Panel as ILogicalScrollable;
 
                 if (_logicalScrollable is not null)
                 {
                     _logicalScrollable.ScrollInvalidated += OnLogicalScrollInvalidated;
+                }
+                else if (wasLogical)
+                {
+                    // The ScrollContentPresenter checks IsLogicalScrollEnabled again only on ScrollInvalidated.
+                    _scrollInvalidated?.Invoke(this, EventArgs.Empty);
                 }
             }
         }
