@@ -537,7 +537,7 @@ namespace Avalonia.Controls
         /// otherwise short-circuit re-measure at the unchanged available size and keep the previous
         /// item's layout. This forces the new item's data to be measured before the arrange pass.
         /// </summary>
-        private static void InvalidateMeasureRecursive(Visual visual)
+        internal static void InvalidateMeasureRecursive(Visual visual)
         {
             if (visual is Layout.Layoutable layoutable)
                 layoutable.InvalidateMeasure();

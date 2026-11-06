@@ -54,7 +54,7 @@ namespace Avalonia.Controls
 
     /// <summary>
     /// The scroll state of an items control by item index instead of pixels. Implemented by a panel
-    /// (<c>LazyStackPanel</c>); get it with <c>itemsControl.ItemsPanelRoot as IItemsScrollInfo</c>.
+    /// (<see cref="LazyStackPanel"/>); get it with <c>itemsControl.ItemsPanelRoot as IItemsScrollInfo</c>.
     /// </summary>
     public interface IItemsScrollInfo
     {
