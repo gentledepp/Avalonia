@@ -81,6 +81,7 @@ namespace Avalonia.Controls.Presenters
             ScrollViewer.IsScrollChainingEnabledProperty.AddOwner<ScrollContentPresenter>();
 
         private bool _arranging;
+        private bool _isUpdatingFromScrollable;
         private Size _extent;
         private IDisposable? _logicalScrollSubscription;
         private Size _viewport;
@@ -169,6 +170,14 @@ namespace Avalonia.Controls.Presenters
             get => _viewport;
             private set => SetAndRaise(ViewportProperty, ref _viewport, value);
         }
+
+        /// <summary>
+        /// Gets the logical scrollable child, or the panel of the child <see cref="ItemsPresenter"/>,
+        /// when it receives scroll commands.
+        /// </summary>
+        internal IScrollCommandTarget? ScrollCommandTarget => _logicalScrollSubscription is null ?
+            null :
+            Child as IScrollCommandTarget ?? (Child as ItemsPresenter)?.Panel as IScrollCommandTarget;
 
         /// <summary>
         /// Gets or sets how scroll gesture reacts to the snap points along the horizontal axis.
@@ -558,6 +567,7 @@ namespace Avalonia.Controls.Presenters
                 var logicalScrollItemSize = new Vector(1, 1);
                 var canXScroll = false;
                 var canYScroll = false;
+                var scrollDelta = default(Vector);
 
                 double x = Offset.X;
                 double y = Offset.Y;
@@ -585,6 +595,7 @@ namespace Avalonia.Controls.Presenters
                         dy = delta.Y;
 
 
+                    scrollDelta = scrollDelta.WithY(dy);
                     y += dy;
                     y = Math.Max(y, 0);
                     y = Math.Min(y, Extent.Height - Viewport.Height);
@@ -603,6 +614,7 @@ namespace Avalonia.Controls.Presenters
                     }
                     else
                         dx = delta.X;
+                    scrollDelta = scrollDelta.WithX(dx);
                     x += dx;
                     x = Math.Max(x, 0);
                     x = Math.Min(x, Extent.Width - Viewport.Width);
@@ -615,6 +627,13 @@ namespace Avalonia.Controls.Presenters
                     if (_activeLogicalGestureScrolls == null)
                         _activeLogicalGestureScrolls = new Dictionary<int, Vector>();
                     _activeLogicalGestureScrolls[e.Id] = delta;
+                }
+
+                if (ScrollCommandTarget is { } commandTarget)
+                {
+                    var scrolled = commandTarget.ScrollBy(scrollDelta, ScrollSource.Touch);
+                    SetScrollGestureHandled(e, scrolled != default, canXScroll || canYScroll);
+                    return;
                 }
 
                 Vector newOffset = new Vector(x, y);
@@ -639,17 +658,21 @@ namespace Avalonia.Controls.Presenters
 
                 bool offsetChanged = newOffset != Offset;
                 SetCurrentValue(OffsetProperty, newOffset);
-
-                e.Handled = !IsScrollChainingEnabled || offsetChanged;
-
-                if(!e.Handled && !IsScrollChainingEnabled)
-                {
-                    // Gesture may cause an overscroll so we mark the event as handled if it did.
-                    e.Handled = canXScroll || canYScroll;
-                }
-
-                e.ShouldEndScrollGesture = !IsScrollChainingEnabled && !offsetChanged;
+                SetScrollGestureHandled(e, offsetChanged, canXScroll || canYScroll);
             }
+        }
+
+        private void SetScrollGestureHandled(ScrollGestureEventArgs e, bool offsetChanged, bool canScroll)
+        {
+            e.Handled = !IsScrollChainingEnabled || offsetChanged;
+
+            if(!e.Handled && !IsScrollChainingEnabled)
+            {
+                // Gesture may cause an overscroll so we mark the event as handled if it did.
+                e.Handled = canScroll;
+            }
+
+            e.ShouldEndScrollGesture = !IsScrollChainingEnabled && !offsetChanged;
         }
 
         private void OnScrollGestureEnded(object? sender, ScrollGestureEndedEventArgs e)
@@ -657,7 +680,8 @@ namespace Avalonia.Controls.Presenters
             _activeLogicalGestureScrolls?.Remove(e.Id);
             _scrollGestureSnapPoints?.Remove(e.Id);
 
-            SetCurrentValue(OffsetProperty, SnapOffset(Offset));
+            if (ScrollCommandTarget is null)
+                SetCurrentValue(OffsetProperty, SnapOffset(Offset));
         }
 
         private void OnScrollGestureInertiaStartingEnded(object? sender, ScrollGestureInertiaStartingEventArgs e)
@@ -737,6 +761,16 @@ namespace Avalonia.Controls.Presenters
                 else
                 {
                     delta = AdjustDeltaForFlowDirection(delta, FlowDirection);
+                }
+
+                if (ScrollCommandTarget is { } commandTarget)
+                {
+                    var scrollSize = scrollable!.ScrollSize;
+                    var scrolled = commandTarget.ScrollBy(new Vector(
+                        Extent.Width > Viewport.Width ? -delta.X * scrollSize.Width : 0,
+                        Extent.Height > Viewport.Height ? -delta.Y * scrollSize.Height : 0), ScrollSource.Wheel);
+                    e.Handled = !IsScrollChainingEnabled || scrolled != default;
+                    return;
                 }
 
                 if (Extent.Height > Viewport.Height)
@@ -844,10 +878,24 @@ namespace Avalonia.Controls.Presenters
                         this.GetObservable(CanVerticallyScrollProperty)
                             .Subscribe(x => scrollable.CanVerticallyScroll = x),
                         this.GetObservable(OffsetProperty)
-                            .Skip(1).Subscribe(x => scrollable.Offset = x),
+                            .Skip(1).Subscribe(x => OnOffsetChanged(scrollable, x)),
                         Disposable.Create(() => scrollable.ScrollInvalidated -= ScrollInvalidated));
                     UpdateFromScrollable(scrollable);
                 }
+            }
+        }
+
+        private void OnOffsetChanged(ILogicalScrollable scrollable, Vector offset)
+        {
+            if (ScrollCommandTarget is { } commandTarget)
+            {
+                // The offset reported by a command target is not a request.
+                if (!_isUpdatingFromScrollable)
+                    commandTarget.ScrollToOffset(offset);
+            }
+            else
+            {
+                scrollable.Offset = offset;
             }
         }
 
@@ -863,14 +911,28 @@ namespace Avalonia.Controls.Presenters
             if (logicalScroll != scrollable.IsLogicalScrollEnabled)
             {
                 UpdateScrollableSubscription(Child);
-                SetCurrentValue(OffsetProperty, default);
+
+                // A command target reported its offset in UpdateScrollableSubscription; a reset now would be a
+                // request (ScrollToOffset(0)) that replaces a command queued before the panel's first layout.
+                if (ScrollCommandTarget is null)
+                    SetCurrentValue(OffsetProperty, default);
+
                 InvalidateMeasure();
             }
             else if (scrollable.IsLogicalScrollEnabled)
             {
-                Viewport = scrollable.Viewport;
-                Extent = scrollable.Extent;
-                SetCurrentValue(OffsetProperty, scrollable.Offset);
+                _isUpdatingFromScrollable = true;
+
+                try
+                {
+                    Viewport = scrollable.Viewport;
+                    Extent = scrollable.Extent;
+                    SetCurrentValue(OffsetProperty, scrollable.Offset);
+                }
+                finally
+                {
+                    _isUpdatingFromScrollable = false;
+                }
             }
         }
 

@@ -707,6 +707,59 @@ namespace Avalonia.Controls.UnitTests
             Assert.Equal(Enumerable.Range(0, 10).Select(x => $"Item{99 - x}"), realized);
         }
 
+        [Theory]
+        [InlineData(NotifyCollectionChangedAction.Add)]
+        [InlineData(NotifyCollectionChangedAction.Remove)]
+        [InlineData(NotifyCollectionChangedAction.Reset)]
+        public void Change_Above_Selection_Does_Not_Scroll_To_It(NotifyCollectionChangedAction action)
+        {
+            var items = new ResettingCollection(100);
+            var target = new ListBox
+            {
+                Template = ListBoxTemplate(),
+                ItemsSource = items,
+                ItemTemplate = new FuncDataTemplate<string>((_, __) => new Canvas { Height = 10 }),
+                AutoScrollToSelectedItem = true,
+            };
+
+            Prepare(target);
+            target.SelectedIndex = 50;
+            Layout(target);
+            Threading.Dispatcher.UIThread.RunJobs(null, TestContext.Current.CancellationToken);
+            Assert.Contains("Item50", Realized(target));
+
+            target.GetVisualDescendants().OfType<ScrollViewer>().Single().Offset = default;
+            Layout(target);
+            Assert.Equal("Item0", Realized(target)[0]);
+
+            switch (action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    items.InsertAndNotify(0, "New");
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                    items.RemoveAtAndNotify(0);
+                    break;
+                default:
+                    items.InsertRange(0, Enumerable.Range(0, 30).Select(x => $"New{x}"));
+                    items.Reset();
+                    break;
+            }
+
+            Layout(target);
+            Threading.Dispatcher.UIThread.RunJobs(null, TestContext.Current.CancellationToken);
+            Layout(target);
+
+            Assert.Equal("Item50", target.SelectedItem);
+            Assert.DoesNotContain("Item50", Realized(target));
+        }
+
+        private static List<string?> Realized(ListBox target) =>
+            target.GetRealizedContainers()
+                .OrderBy(target.IndexFromContainer)
+                .Select(x => (string?)x.DataContext)
+                .ToList();
+
         [Fact]
         public void Handles_Resetting_Items_With_Existing_Selection_And_AutoScrollToSelectedItem()
         {
@@ -1338,9 +1391,28 @@ namespace Avalonia.Controls.UnitTests
             public new void Reverse()
             {
                 base.Reverse();
+                Reset();
+            }
+
+            public void Reset() => CollectionChanged?.Invoke(
+                this,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+
+            public void InsertAndNotify(int index, string item)
+            {
+                Insert(index, item);
                 CollectionChanged?.Invoke(
                     this,
-                    new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                    new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
+            }
+
+            public void RemoveAtAndNotify(int index)
+            {
+                var item = this[index];
+                RemoveAt(index);
+                CollectionChanged?.Invoke(
+                    this,
+                    new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
             }
 
             public event NotifyCollectionChangedEventHandler? CollectionChanged;

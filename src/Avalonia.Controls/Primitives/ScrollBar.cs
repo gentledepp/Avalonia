@@ -302,7 +302,10 @@ namespace Avalonia.Controls.Primitives
             else if (change.Property == ValueProperty)
             {
                 var value = change.GetNewValue<double>();
-                _owner?.SetCurrentValue(ScrollViewer.OffsetProperty, Orientation == Orientation.Horizontal ? _owner.Offset.WithX(value) : _owner.Offset.WithY(value));
+
+                // A command target gets the request from the action that changed the value.
+                if (_owner?.ScrollCommandTarget is null)
+                    _owner?.SetCurrentValue(ScrollViewer.OffsetProperty, Orientation == Orientation.Horizontal ? _owner.Offset.WithX(value) : _owner.Offset.WithY(value));
             }
             else
             {
@@ -471,29 +474,34 @@ namespace Avalonia.Controls.Primitives
         private void SmallDecrement()
         {
             SetCurrentValue(ValueProperty, Math.Max(Value - SmallChange, Minimum));
+            _owner?.ScrollBarScrollBy(Orientation, -SmallChange);
             OnScroll(ScrollEventType.SmallDecrement);
         }
 
         private void SmallIncrement()
         {
             SetCurrentValue(ValueProperty, Math.Min(Value + SmallChange, Maximum));
+            _owner?.ScrollBarScrollBy(Orientation, SmallChange);
             OnScroll(ScrollEventType.SmallIncrement);
         }
 
         private void LargeDecrement()
         {
             SetCurrentValue(ValueProperty, Math.Max(Value - LargeChange, Minimum));
+            _owner?.ScrollBarScrollBy(Orientation, -LargeChange);
             OnScroll(ScrollEventType.LargeDecrement);
         }
 
         private void LargeIncrement()
         {
             SetCurrentValue(ValueProperty, Math.Min(Value + LargeChange, Maximum));
+            _owner?.ScrollBarScrollBy(Orientation, LargeChange);
             OnScroll(ScrollEventType.LargeIncrement);
         }
 
         private void OnThumbDragDelta(VectorEventArgs e)
         {
+            ScrollOwnerToValue();
             OnScroll(ScrollEventType.ThumbTrack);
         }
 
@@ -511,7 +519,17 @@ namespace Avalonia.Controls.Primitives
                 CollapseAfterDelay();
             }
 
+            // With deferred scrolling, the value changes when the drag completes.
+            ScrollOwnerToValue();
             OnScroll(ScrollEventType.EndScroll);
+        }
+
+        private void ScrollOwnerToValue()
+        {
+            var offset = _owner?.Offset ?? default;
+
+            if (Value != (Orientation == Orientation.Horizontal ? offset.X : offset.Y))
+                _owner?.ScrollBarScrollTo(Orientation, Value);
         }
 
         protected void OnScroll(ScrollEventType scrollEventType)
@@ -569,6 +587,7 @@ namespace Avalonia.Controls.Primitives
                 var range = Maximum - Minimum;
                 var value = Minimum + (ratio * range);
                 SetCurrentValue(ValueProperty, Math.Max(Minimum, Math.Min(Maximum, value)));
+                ScrollOwnerToValue();
                 OnScroll(ScrollEventType.ThumbTrack);
             }
         }
@@ -579,6 +598,7 @@ namespace Avalonia.Controls.Primitives
         public void ScrollToHome()
         {
             SetCurrentValue(ValueProperty, Minimum);
+            _owner?.ScrollBarScrollToEdge(Orientation, ScrollEdge.Start);
             OnScroll(ScrollEventType.SmallDecrement);
         }
 
@@ -588,6 +608,7 @@ namespace Avalonia.Controls.Primitives
         public void ScrollToEnd()
         {
             SetCurrentValue(ValueProperty, Maximum);
+            _owner?.ScrollBarScrollToEdge(Orientation, ScrollEdge.End);
             OnScroll(ScrollEventType.SmallIncrement);
         }
 

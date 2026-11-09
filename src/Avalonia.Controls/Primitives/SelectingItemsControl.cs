@@ -144,6 +144,8 @@ namespace Avalonia.Controls.Primitives
         private ISelectionModel? _selection;
         private int _oldSelectedIndex;
         private WeakReference _oldSelectedItem = new(null);
+        private WeakReference _anchorItem = new(null);
+        private bool _isResetting;
         private WeakReference<IList?> _oldSelectedItems = new(null);
         private readonly List<object?> _selectedItemsSnapshot = new();
         private object?[]? _selectedItemsBeforeReset;
@@ -472,6 +474,8 @@ namespace Avalonia.Controls.Primitives
 
         private void OnItemsViewPreCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
+            _isResetting = e.Action == NotifyCollectionChangedAction.Reset;
+
             if (e.Action == NotifyCollectionChangedAction.Reset && _selectedItemsSnapshot.Count > 0)
             {
                 _selectedItemsBeforeReset = _selectedItemsSnapshot.ToArray();
@@ -972,11 +976,29 @@ namespace Avalonia.Controls.Primitives
         {
             if (e.PropertyName == nameof(ISelectionModel.AnchorIndex))
             {
-                _hasScrolledToSelectedItem = false;
-
                 var anchorIndex = GetAnchorIndex();
+                var anchorItem = anchorIndex >= 0 && anchorIndex < ItemsView.Count ? ItemsView[anchorIndex] : null;
+
+                // A collection change only moved the anchor item: not a new selection, no scroll.
+                // A Reset clears the anchor before it selects the item again.
+                var moved = anchorItem is not null && Equals(anchorItem, _anchorItem.Target);
+                if (anchorItem is not null || !_isResetting)
+                {
+                    _anchorItem.Target = anchorItem;
+                    _isResetting = false;
+                }
+
                 KeyboardNavigation.SetTabOnceActiveElement(this, ContainerFromIndex(anchorIndex));
-                AutoScrollToSelectedItemIfNecessary(anchorIndex);
+
+                if (!moved)
+                {
+                    _hasScrolledToSelectedItem = false;
+                    AutoScrollToSelectedItemIfNecessary(anchorIndex);
+                }
+                else if (_pendingAutoScrollAnchorIndex is not null)
+                {
+                    _pendingAutoScrollAnchorIndex = anchorIndex;
+                }
             }
             else if (e.PropertyName == nameof(ISelectionModel.SelectedIndex))
             {

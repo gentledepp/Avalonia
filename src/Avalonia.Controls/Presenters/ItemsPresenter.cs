@@ -109,12 +109,20 @@ namespace Avalonia.Controls.Presenters
                 else
                     CreateSimplePanelGenerator();
 
+                var wasLogical = _logicalScrollable is not null;
                 _logicalScrollable = Panel as ILogicalScrollable;
 
                 if (_logicalScrollable is not null)
                 {
                     _logicalScrollable.ScrollInvalidated += OnLogicalScrollInvalidated;
                 }
+                else if (wasLogical)
+                {
+                    // The ScrollContentPresenter checks IsLogicalScrollEnabled again only on ScrollInvalidated.
+                    _scrollInvalidated?.Invoke(this, EventArgs.Empty);
+                }
+
+                ItemsControl.RaiseItemsPanelRootChanged(this);
             }
         }
 
@@ -169,7 +177,12 @@ namespace Avalonia.Controls.Presenters
             LogicalChildren.Clear();
             VisualChildren.Clear();
             (Panel as VirtualizingPanel)?.Detach();
-            Panel = null;
+
+            if (Panel is not null)
+            {
+                Panel = null;
+                ItemsControl?.RaiseItemsPanelRootChanged(this);
+            }
         }
 
         private void CreateSimplePanelGenerator()

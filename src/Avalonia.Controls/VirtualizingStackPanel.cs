@@ -18,7 +18,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Arranges and virtualizes content on a single line that is oriented either horizontally or vertically.
     /// </summary>
-    public class VirtualizingStackPanel : VirtualizingPanel, IScrollSnapPointsInfo
+    public class VirtualizingStackPanel : VirtualizingPanel, IScrollSnapPointsInfo, IContentRecyclingPanel
     {
         /// <summary>
         /// Defines the <see cref="Orientation"/> property.
@@ -66,9 +66,7 @@ namespace Avalonia.Controls
         /// Default: false (opt-in).
         /// </summary>
         public static readonly StyledProperty<bool> EnableWarmupProperty =
-            AvaloniaProperty.Register<VirtualizingStackPanel, bool>(
-                nameof(EnableWarmup),
-                defaultValue: false);
+            ContainerRecyclePool.EnableWarmupProperty.AddOwner<VirtualizingStackPanel>();
 
         /// <summary>
         /// Gets or sets the number of items to sample for template discovery during warmup.
@@ -76,13 +74,9 @@ namespace Avalonia.Controls
         /// Default: 50 items.
         /// </summary>
         public static readonly StyledProperty<int> WarmupSampleSizeProperty =
-            AvaloniaProperty.Register<VirtualizingStackPanel, int>(
-                nameof(WarmupSampleSize),
-                defaultValue: 50,
-                validate: v => v > 0 && v <= 1000);
+            ContainerRecyclePool.WarmupSampleSizeProperty.AddOwner<VirtualizingStackPanel>();
 
-        private static readonly AttachedProperty<object?> RecycleKeyProperty =
-            AvaloniaProperty.RegisterAttached<VirtualizingStackPanel, Control, object?>("RecycleKey");
+        private static readonly AttachedProperty<object?> RecycleKeyProperty = ContainerRecyclePool.RecycleKeyProperty;
 
         private static readonly object s_itemIsItsOwnContainer = new object();
         private readonly Action<Control, int> _recycleElement;
@@ -97,19 +91,18 @@ namespace Avalonia.Controls
         private RealizedStackElements? _realizedElements;
         private IScrollAnchorProvider? _scrollAnchorProvider;
         private Rect _viewport;
-        private Dictionary<object, List<Control>>? _recyclePool;
+        private readonly ContainerRecyclePool _recyclePool;
 
         /// <summary>
         /// Exposes the recycle pool for unit testing.
         /// </summary>
-        internal IReadOnlyDictionary<object, List<Control>>? RecyclePoolForTesting => _recyclePool;
+        internal IReadOnlyDictionary<object, List<Control>>? RecyclePoolForTesting => _recyclePool.RecyclePoolForTesting;
 
         private Control? _focusedElement;
         private int _focusedIndex = -1;
         private Control? _realizingElement;
         private int _realizingIndex = -1;
         private double _bufferFactor;
-        private bool _isWarmupComplete = false;
 
         private bool _hasReachedStart = false;
         private bool _hasReachedEnd = false;
@@ -168,6 +161,7 @@ namespace Avalonia.Controls
             _recycleElement = RecycleElement;
             _recycleElementOnItemRemoved = RecycleElementOnItemRemoved;
             _updateElementIndex = UpdateElementIndex;
+            _recyclePool = new ContainerRecyclePool(this, GetWarmupAvailableSize);
 
             _bufferFactor = Math.Max(0, CacheLength);
             EffectiveViewportChanged += OnEffectiveViewportChanged;
@@ -530,12 +524,7 @@ namespace Avalonia.Controls
         {
             base.OnAttachedToVisualTree(e);
             _scrollAnchorProvider = this.FindAncestorOfType<IScrollAnchorProvider>();
-
-            // Schedule warmup after initial render if enabled
-            if (EnableWarmup && !_isWarmupComplete)
-            {
-                Threading.Dispatcher.UIThread.Post(PerformWarmup, Threading.DispatcherPriority.Background);
-            }
+            _recyclePool.OnAttachedToVisualTree();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -555,15 +544,7 @@ namespace Avalonia.Controls
             _frozenStableCount = 0;
             InvalidateMeasure();
 
-            // Handle async collection loading - trigger warmup when first items become available
-            if (EnableWarmup && !_isWarmupComplete && items.Count > 0 && e.Action == NotifyCollectionChangedAction.Add)
-            {
-                if (_recyclePool == null || _recyclePool.Count == 0)
-                {
-
-                    Threading.Dispatcher.UIThread.Post(PerformWarmup, Threading.DispatcherPriority.Background);
-                }
-            }
+            _recyclePool.OnItemsChanged(items, e);
 
             // Always update special elements (focused, scroll-to) on collection changes
             UpdateSpecialElementsOnItemsChanged(e);
@@ -682,37 +663,8 @@ namespace Avalonia.Controls
                         _lastEstimateLastIndex = -1;
                     }
 
-                    // WARMUP OPTIMIZATION: After reset, clear only obsolete keys and top-up if needed
-                    if (EnableWarmup && _isWarmupComplete && !shouldPreserveRealizedElements && items.Count > 0)
-                    {
-                        // Clear only containers whose keys are no longer in the new collection
-                        ClearObsoleteWarmupContainers();
-
-                        // Discover what keys we need now
-                        var currentKeys = DiscoverTemplateKeys();
-
-                        // Check if we need to warm up any new keys or top-up existing ones
-                        bool needsWarmup = false;
-                        foreach (var kvp in currentKeys)
-                        {
-                            var existingCount = _recyclePool?.TryGetValue(kvp.Key, out var pool) == true
-                                ? pool.Count
-                                : 0;
-
-                            if (existingCount < kvp.Value)
-                            {
-                                needsWarmup = true;
-                                break;
-                            }
-                        }
-
-                        if (needsWarmup)
-                        {
-
-                            _isWarmupComplete = false;
-                            Threading.Dispatcher.UIThread.Post(PerformWarmup, Threading.DispatcherPriority.Background);
-                        }
-                    }
+                    if (!shouldPreserveRealizedElements)
+                        _recyclePool.OnItemsReset(items);
 
                     break;
             }
@@ -727,27 +679,8 @@ namespace Avalonia.Controls
             {
                 if (_realizedElements is { Count: > 0 })
                     _realizedElements.RecycleAllElements(_recycleElement);
-                RemoveRecyclePoolChildren();
+                _recyclePool.Clear();
             }
-        }
-
-        /// <summary>
-        /// Removes all pooled recycle containers from the visual tree and clears the pool.
-        /// Used when the collection becomes empty to avoid leaving invisible "ghost" children.
-        /// </summary>
-        private void RemoveRecyclePoolChildren()
-        {
-            if (_recyclePool is null || _recyclePool.Count == 0)
-                return;
-
-            foreach (var pool in _recyclePool.Values)
-            {
-                for (var i = pool.Count - 1; i >= 0; i--)
-                    RemoveInternalChild(pool[i]);
-                pool.Clear();
-            }
-
-            _recyclePool.Clear();
         }
 
         private void UpdateSpecialElementsOnItemsChanged(NotifyCollectionChangedEventArgs e)
@@ -1833,8 +1766,8 @@ namespace Avalonia.Controls
 
             if (generator.NeedsContainer(item, index, out var recycleKey))
             {
-                return GetRecycledElement(item, index, recycleKey) ??
-                       CreateElement(item, index, recycleKey);
+                return _recyclePool.GetRecycledContainer(item, index, recycleKey) ??
+                       _recyclePool.CreateContainer(item, index, recycleKey);
             }
             else
             {
@@ -1884,86 +1817,6 @@ namespace Avalonia.Controls
             return controlItem;
         }
 
-        private Control? GetRecycledElement(object? item, int index, object? recycleKey)
-        {
-            Debug.Assert(ItemContainerGenerator is not null);
-
-            if (recycleKey is null)
-                return null;
-
-            var generator = ItemContainerGenerator!;
-
-            if (_recyclePool?.TryGetValue(recycleKey, out var recyclePool) == true && recyclePool.Count > 0)
-            {
-                // edge case: The item is already datacontext of a recyclable item
-                var recycleIndex = recyclePool.Count - 1;
-                for (int i = 0; i < recyclePool.Count; i++)
-                {
-                    if (recyclePool[i].DataContext == item)
-                    {
-                        recycleIndex = i;
-                        break;
-                    }
-                }
-
-                var recycled = recyclePool[recycleIndex];
-                recyclePool.RemoveAt(recycleIndex);
-                recycled.SetCurrentValue(Visual.IsVisibleProperty, true);
-
-                // Detect whether this pooled container is being reused for a *different* item.
-                // For IVirtualizingDataTemplate the container is not cleared on recycle and the
-                // same child instance is reused, so a container reused for a new item keeps its
-                // previous content's cached layout. Making the container visible invalidates the
-                // container's own measure, but its content subtree is still IsMeasureValid at the
-                // same available size and would short-circuit re-measure — leaving the new item
-                // arranged with the previous item's size (content rendered blank / clipped, or
-                // text not re-wrapped). Force the reused subtree to re-measure in that case.
-                // When reused for the SAME item, the cached layout is still correct — skip the work.
-                var dataContextChanged = !ReferenceEquals(recycled.DataContext, item);
-
-                generator.PrepareItemContainer(recycled, item, index);
-                generator.ItemContainerPrepared(recycled, item, index);
-
-                if (dataContextChanged)
-                    InvalidateMeasureRecursive(recycled);
-
-                return recycled;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Invalidates the measure of <paramref name="visual"/> and its entire visual subtree.
-        /// Needed when a recycled container is reused for a different item: the container's content
-        /// is not re-created (IVirtualizingDataTemplate reuses the child), so descendants would
-        /// otherwise short-circuit re-measure at the unchanged available size and keep the previous
-        /// item's layout. This forces the new item's data to be measured before the arrange pass.
-        /// </summary>
-        private static void InvalidateMeasureRecursive(Visual visual)
-        {
-            if (visual is Layoutable layoutable)
-                layoutable.InvalidateMeasure();
-
-            foreach (var child in visual.GetVisualChildren())
-                InvalidateMeasureRecursive(child);
-        }
-
-        private Control CreateElement(object? item, int index, object? recycleKey)
-        {
-            Debug.Assert(ItemContainerGenerator is not null);
-
-            var generator = ItemContainerGenerator!;
-            var container = generator.CreateContainer(item, index, recycleKey);
-
-            container.SetValue(RecycleKeyProperty, recycleKey);
-            generator.PrepareItemContainer(container, item, index);
-            AddInternalChild(container);
-            generator.ItemContainerPrepared(container, item, index);
-
-            return container;
-        }
-
         private void RecycleElement(Control element, int index)
         {
             Debug.Assert(ItemsControl is not null);
@@ -1988,9 +1841,7 @@ namespace Avalonia.Controls
             }
             else
             {
-                ItemContainerGenerator!.ClearItemContainer(element);
-                PushToRecyclePool(recycleKey, element);
-                element.SetCurrentValue(Visual.IsVisibleProperty, false);
+                _recyclePool.RecycleContainer(element);
             }
         }
 
@@ -2104,30 +1955,10 @@ namespace Avalonia.Controls
             }
             else
             {
-                ItemContainerGenerator!.ClearItemContainer(element);
-                PushToRecyclePool(recycleKey, element);
-                element.SetCurrentValue(Visual.IsVisibleProperty, false);
+                _recyclePool.RecycleContainer(element);
             }
         }
         
-        private void PushToRecyclePool(object recycleKey, Control element)
-        {
-            _recyclePool ??= new();
-
-            if (!_recyclePool.TryGetValue(recycleKey, out var pool))
-            {
-                pool = new();
-                _recyclePool.Add(recycleKey, pool);
-            }
-
-            // respect max poolsize per key of IVirtualizingDataTemplate
-            if (ItemsControl?.ItemTemplate is Templates.IVirtualizingDataTemplate vdt &&
-                pool.Count >= vdt.MaxPoolSizePerKey)
-                return;
-            
-            pool.Add(element);
-        }
-
         private void UpdateElementIndex(Control element, int oldIndex, int newIndex)
         {
             Debug.Assert(ItemContainerGenerator is not null);
@@ -2370,87 +2201,19 @@ namespace Avalonia.Controls
             // Handle ItemTemplate changes - invalidate warmup and re-trigger if enabled
             if (e.Property == ItemsControl.ItemTemplateProperty)
             {
-                if (EnableWarmup && _isWarmupComplete)
-                {
-
-                    ClearWarmupContainers();
-                    _isWarmupComplete = false;
-
-                    Threading.Dispatcher.UIThread.Post(PerformWarmup, Threading.DispatcherPriority.Background);
-                }
+                _recyclePool.OnItemTemplateChanged();
             }
         }
 
-        /// <summary>
-        /// Clears unused warmup containers from the recycle pool.
-        /// Only removes containers that haven't been used yet (null DataContext and invisible).
-        /// </summary>
-        private void ClearWarmupContainers()
+        internal Dictionary<object, int> DiscoverTemplateKeys() => _recyclePool.DiscoverTemplateKeys();
+
+        internal void PerformWarmup() => _recyclePool.PerformWarmup();
+
+        private Size GetWarmupAvailableSize()
         {
-            if (_recyclePool == null)
-                return;
-
-            int clearedCount = 0;
-
-            foreach (var pool in _recyclePool.Values)
-            {
-                for (int i = pool.Count - 1; i >= 0; i--)
-                {
-                    var container = pool[i];
-                    if (container.DataContext == null && !container.IsVisible)
-                    {
-                        RemoveInternalChild(container);
-                        pool.RemoveAt(i);
-                        clearedCount++;
-                    }
-                }
-            }
-
-        }
-
-        /// <summary>
-        /// Clears only obsolete warmup containers from the recycle pool.
-        /// Preserves containers whose recycleKey is still active in the current collection.
-        /// </summary>
-        private void ClearObsoleteWarmupContainers()
-        {
-            if (_recyclePool == null)
-                return;
-
-            // Get currently needed keys from the new collection
-            var activeKeys = new HashSet<object>(DiscoverTemplateKeys().Keys);
-
-            var keysToRemove = new List<object>();
-            int clearedCount = 0;
-
-            foreach (var kvp in _recyclePool)
-            {
-                var recycleKey = kvp.Key;
-                var pool = kvp.Value;
-
-                // Only clear pools for obsolete keys (not in new collection)
-                if (!activeKeys.Contains(recycleKey))
-                {
-                    for (int i = pool.Count - 1; i >= 0; i--)
-                    {
-                        var container = pool[i];
-                        if (container.DataContext == null && !container.IsVisible)
-                        {
-                            RemoveInternalChild(container);
-                            pool.RemoveAt(i);
-                            clearedCount++;
-                        }
-                    }
-
-                    if (pool.Count == 0)
-                        keysToRemove.Add(recycleKey);
-                }
-            }
-
-            // Remove empty pools
-            foreach (var key in keysToRemove)
-                _recyclePool.Remove(key);
-
+            return Orientation == Orientation.Horizontal
+                ? new Size(double.PositiveInfinity, Bounds.Height > 0 ? Bounds.Height : _lastEstimatedElementSizeU)
+                : new Size(Bounds.Width > 0 ? Bounds.Width : double.PositiveInfinity, double.PositiveInfinity);
         }
 
         private void OnCacheLengthChanged(AvaloniaPropertyChangedEventArgs e)
@@ -2460,165 +2223,6 @@ namespace Avalonia.Controls
 
             // Force a recalculation of the extended viewport on the next layout pass
             InvalidateMeasure();
-        }
-
-        /// <summary>
-        /// Discovers unique template types/keys by sampling items from the collection.
-        /// Returns a dictionary mapping recycle keys to target warmup counts.
-        /// </summary>
-        internal Dictionary<object, int> DiscoverTemplateKeys()
-        {
-            var templateKeys = new Dictionary<object, int>();
-            var items = Items;
-
-            if (items == null || items.Count == 0 || ItemContainerGenerator == null)
-                return templateKeys;
-
-            // Sample first N items to discover template types
-            int sampleSize = Math.Min(WarmupSampleSize, items.Count);
-
-            for (int i = 0; i < sampleSize; i++)
-            {
-                var item = items[i];
-
-                // Use ItemContainerGenerator to determine recycle key without creating container
-                if (ItemContainerGenerator.NeedsContainer(item, i, out var recycleKey) && recycleKey != null)
-                    CollectionsMarshal.GetValueRefOrAddDefault(templateKeys, recycleKey, out _)++;
-            }
-
-            // Query MaxPoolSizePerKey from IVirtualizingDataTemplate if available
-            if (ItemsControl?.ItemTemplate is Templates.IVirtualizingDataTemplate vdt)
-            {
-                foreach (var key in templateKeys.Keys.ToList())
-                {
-                    templateKeys[key] = vdt.MinPoolSizePerKey;
-                }
-
-            }
-            else
-            {
-                // Default to 3 containers per type if no MaxPoolSizePerKey available
-                foreach (var key in templateKeys.Keys.ToList())
-                {
-                    templateKeys[key] = 3;
-                }
-            }
-
-            return templateKeys;
-        }
-
-        /// <summary>
-        /// Pre-creates containers with their content for each discovered template type.
-        /// Containers are stored in the recycle pool with their Child controls already attached,
-        /// ready to be reused during scrolling. This eliminates the expensive template instantiation
-        /// cost during the first scroll.
-        /// </summary>
-        internal void PerformWarmup()
-        {
-            if (_isWarmupComplete || Items == null || Items.Count == 0)
-                return;
-
-            var startTime = System.Diagnostics.Stopwatch.StartNew();
-            var templateKeys = DiscoverTemplateKeys();
-
-            if (templateKeys.Count == 0)
-            {
-                _isWarmupComplete = true;
-                return;
-            }
-
-            _recyclePool ??= new Dictionary<object, List<Control>>();
-            
-            var orientation = Orientation;
-            var availableSize = orientation == Orientation.Horizontal
-                ? new Size(double.PositiveInfinity, Bounds.Height > 0 ? Bounds.Height : _lastEstimatedElementSizeU)
-                : new Size(Bounds.Width > 0 ? Bounds.Width : double.PositiveInfinity, double.PositiveInfinity);
-            
-            int totalCreated = 0;
-
-            int alreadyRealized = _realizedElements?.Elements?.Count ?? 0;
-            Dictionary<object, List<Control?>> realizedElementsLookup = new();
-            if(_realizedElements is { Elements: not null } realizedElements)
-            {
-                realizedElementsLookup = realizedElements.Elements.Where(re => re != null)
-                    .GroupBy(re => re!.GetValue(RecycleKeyProperty))
-                    .ToDictionary(g => g.Key??new object(), g => g.ToList());
-                
-            }
-
-            foreach (var kvp in templateKeys)
-            {
-                var recycleKey = kvp.Key;
-                var targetCount = kvp.Value;
-
-                // OPTIMIZATION: Check existing pool size
-                var existingCount = _recyclePool.TryGetValue(recycleKey, out var existingPool)
-                    ? existingPool.Count
-                    : 0;
-                // OPTIMIZATION 2: Check realized elements
-                if (realizedElementsLookup.TryGetValue(recycleKey, out var realized))
-                    existingCount += realized.Count;
-
-                var neededCount = Math.Max(0, targetCount - existingCount);
-
-                if (neededCount == 0)
-                {
-                    continue;
-                }
-
-                // Collect actual items from the ItemsSource that match this recycle key
-                // CHANGED: Only collect neededCount items, not targetCount
-                var matchingItems = new List<(object item, int index)>();
-                var startIndex = Math.Max(alreadyRealized - 1, 0);
-                for (int i = startIndex; i < Math.Min(WarmupSampleSize+alreadyRealized, Items.Count); i++)
-                {
-                    var item = Items[i];
-                    if (ItemContainerGenerator!.NeedsContainer(item, i, out var key) &&
-                        Equals(key, recycleKey) && item is not null)
-                    {
-                        matchingItems.Add((item, i));
-                        if (matchingItems.Count >= neededCount)  // CHANGED: from targetCount
-                            break;
-                    }
-                }
-
-                if (matchingItems.Count == 0)
-                    continue;
-
-                // Create containers for real items (but only those not yet realized)
-                for (int i = 0; i < matchingItems.Count; i++)
-                {
-                    var (item, index) = matchingItems[i];
-
-                    try
-                    {
-                        // Create container with real item - this creates the Container + Child together
-                        // PrepareContainerForItemOverride is called, which creates the Child control
-                        var container = CreateElement(item, index, recycleKey);
-
-                        // Pre-measure with typical available size to cache layout
-                        container.Measure(availableSize);
-
-                        // IMPORTANT: Do NOT clear the container!
-                        // The Child control should stay attached with its template instantiated.
-                        // When reused, only the data binding will update (cheap operation).
-
-                        // Push to recycle pool - container + child are pooled together
-                        PushToRecyclePool(recycleKey, container);
-                        container.SetCurrentValue(Visual.IsVisibleProperty, false);
-
-                        totalCreated++;
-                    }
-                    catch
-                    {
-                        break;
-                    }
-                }
-            }
-
-            _isWarmupComplete = true;
-            startTime.Stop();
-
         }
 
         /// <inheritdoc/>

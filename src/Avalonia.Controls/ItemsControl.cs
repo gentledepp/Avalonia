@@ -484,7 +484,7 @@ namespace Avalonia.Controls
                 // Check if we should skip clearing for virtualization
                 // ONLY skip when using a VirtualizingPanel that actually recycles containers
                 // When we skip clearing, the Child stays attached to this container
-                if(cc.Presenter != null && ContentVirtualizationDiagnostics.IsEnabled && Presenter?.Panel is VirtualizingStackPanel)
+                if(cc.Presenter != null && ContentVirtualizationDiagnostics.IsEnabled && Presenter?.Panel is IContentRecyclingPanel)
                 {
                     var item = cc.Content;
                     var template = cc.ContentTemplate;
@@ -517,7 +517,7 @@ namespace Avalonia.Controls
                 // Check if we should skip clearing for virtualization
                 // ONLY skip when using a VirtualizingPanel that actually recycles containers
                 // When we skip clearing, the Child stays attached to this container
-                if (ContentVirtualizationDiagnostics.IsEnabled && Presenter?.Panel is VirtualizingStackPanel)
+                if (ContentVirtualizationDiagnostics.IsEnabled && Presenter?.Panel is IContentRecyclingPanel)
                 {
                     if (template is IVirtualizingDataTemplate vdt && vdt.GetKey(item) != null)
                     {
@@ -605,7 +605,7 @@ namespace Avalonia.Controls
             // When content virtualization is enabled, use type-aware recycling keys to ensure
             // containers are only reused for compatible data types. This prevents unnecessary
             // Child rebuilds in ContentPresenter when the data type changes.
-            if (ContentVirtualizationDiagnostics.IsEnabled && Presenter?.Panel is VirtualizingStackPanel)
+            if (ContentVirtualizationDiagnostics.IsEnabled && Presenter?.Panel is IContentRecyclingPanel)
             {
                 // Only check ItemTemplate property if set (avoid FindDataTemplate during measure)
                 // For DataTemplates collections, we rely on item type matching template DataType
@@ -796,6 +796,19 @@ namespace Avalonia.Controls
         {
             Presenter = presenter;
             _childIndexChanged?.Invoke(this, ChildIndexChangedEventArgs.ChildIndexesReset);
+            ItemsPanelRootChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Raised when <see cref="ItemsPanelRoot"/> may have changed (the presenter or its panel), for
+        /// <see cref="ItemsScroll"/>.
+        /// </summary>
+        internal event EventHandler? ItemsPanelRootChanged;
+
+        internal void RaiseItemsPanelRootChanged(ItemsPresenter presenter)
+        {
+            if (presenter == Presenter)
+                ItemsPanelRootChanged?.Invoke(this, EventArgs.Empty);
         }
 
         internal void PrepareItemContainer(Control container, object? item, int index)
@@ -945,8 +958,11 @@ namespace Avalonia.Controls
             if (_templateCache.TryGetValue(itemType, out var cachedTemplate))
                 return cachedTemplate;
 
-            // Not in cache - need to find it (this may walk the tree)
-            var template = container.FindDataTemplate(item, null);
+            // Not in cache - need to find it (this may walk the tree). A virtualizing panel can
+            // prepare a new container before it adds it to the logical tree.
+            var template = container.GetLogicalParent() is null ?
+                this.FindDataTemplate(item, null) :
+                container.FindDataTemplate(item, null);
 
             // Cache the result for this type
             _templateCache[itemType] = template;
