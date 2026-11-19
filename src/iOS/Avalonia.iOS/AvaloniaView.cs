@@ -346,8 +346,17 @@ namespace Avalonia.iOS
             }
         }
 
+        /// <summary>
+        /// Incremented when a touch begins, so a tap can tell whether it is the one that focused the text box.
+        /// </summary>
+        internal uint TouchSequence { get; private set; }
+
         /// <inheritdoc/>
-        public override void TouchesBegan(NSSet touches, UIEvent? evt) => _input.Handle(touches, evt);
+        public override void TouchesBegan(NSSet touches, UIEvent? evt)
+        {
+            TouchSequence++;
+            _input.Handle(touches, evt);
+        }
 
         /// <inheritdoc/>
         public override void TouchesMoved(NSSet touches, UIEvent? evt) => _input.Handle(touches, evt);

@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Avalonia.Controls.Platform;
 using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
@@ -540,11 +541,59 @@ partial class AvaloniaView
             }
         }
 
+        /// <summary>
+        /// Brings back a keyboard that UIKit hid while this responder stayed first responder.
+        /// </summary>
+        internal void ShowKeyboard()
+        {
+            if (!IsFirstResponder)
+            {
+                BecomeFirstResponder();
+                return;
+            }
+
+            // becomeFirstResponder is a no-op here; reloadInputViews shows the keyboard again. Leave a visible
+            // keyboard alone, since reloading it can reset the page the user switched to (the numbers page of a
+            // full keyboard, say). The iPad number pad popover is not reported reliably by the keyboard
+            // notifications, so reload that one regardless.
+            if (IsKeyboardReportedHidden || MayBeIPadNumberPadPopover)
+            {
+                Logger.TryGet(LogEventLevel.Debug, ImeLog)?.Log(null, "Reloading input views");
+                ReloadInputViews();
+            }
+        }
+
+        private static bool IsKeyboardReportedHidden =>
+#if TVOS || MACCATALYST
+            false;
+#else
+            UIKitInputPane.Instance.State == InputPaneState.Closed;
+#endif
+
+        // iPadOS 26 shows number pads as a floating popover. From 26.2 it asks allowsNumberPadPopover first and
+        // otherwise shows the numbers page of the full keyboard; 26.0 and 26.1 always show the popover.
+        private bool MayBeIPadNumberPadPopover =>
+#if TVOS || MACCATALYST
+            false;
+#else
+            UIDevice.CurrentDevice.UserInterfaceIdiom == UIUserInterfaceIdiom.Pad
+            && (KeyboardType is UIKeyboardType.NumberPad or UIKeyboardType.DecimalPad
+                or UIKeyboardType.PhonePad or UIKeyboardType.AsciiCapableNumberPad)
+            && OperatingSystem.IsIOSVersionAtLeast(26)
+            && (AllowsNumberPadPopover || !OperatingSystem.IsIOSVersionAtLeast(26, 2));
+#endif
+
+        /// <summary>
+        /// The view's touch sequence when this responder last became first responder.
+        /// </summary>
+        internal uint FirstResponderTouchSequence { get; private set; }
+
         public override bool BecomeFirstResponder()
         {
             var res = base.BecomeFirstResponder();
             if (res)
             {
+                FirstResponderTouchSequence = _view.TouchSequence;
                 Logger.TryGet(LogEventLevel.Debug, "IOSIME")
                     ?.Log(null, "Became first responder");
                 _client.SurroundingTextChanged += SurroundingTextChanged;
