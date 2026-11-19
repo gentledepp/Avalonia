@@ -84,6 +84,11 @@ partial class AvaloniaView
 
         [Export("passwordRules")] public UITextInputPasswordRules? PasswordRules { get; set; } = null!;
 
+        // iPadOS 26.2+ asks whether a number pad may be the small floating popover instead of the numbers
+        // page of the full keyboard. Older versions never call it.
+        [Export("allowsNumberPadPopover")]
+        public bool AllowsNumberPadPopover => Platform.Options?.AllowNumberPadPopover ?? false;
+
         public NSObject? WeakInputDelegate
         {
             get;

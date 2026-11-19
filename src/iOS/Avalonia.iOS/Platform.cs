@@ -43,6 +43,15 @@ namespace Avalonia
         {
             iOSRenderingMode.Metal, iOSRenderingMode.OpenGl
         };
+
+        /// <summary>
+        /// Gets or sets whether iPadOS may show number keyboards (the Number, Digits and Pin
+        /// <see cref="Avalonia.Input.TextInput.TextInputContentType"/>s) as a small floating number pad next to
+        /// the text box instead of the numbers page of the full keyboard. Only iPadOS 26.2 and later honor this.
+        /// The default value is false: the floating pad closes on any tap outside it, and to UIKit every tap in
+        /// the Avalonia view is outside it, so the user could not move the caret and keep typing.
+        /// </summary>
+        public bool AllowNumberPadPopover { get; set; }
     }
 
     public static class IOSApplicationExtensions
