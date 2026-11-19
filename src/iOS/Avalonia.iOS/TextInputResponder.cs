@@ -442,9 +442,12 @@ partial class AvaloniaView
             // TODO: Query from the input client
             Logger.TryGet(LogEventLevel.Debug, ImeLog)?
                 .Log(null, "IUITextInput:GetCaretRectForPosition");
-            var rect = _client.CursorRectangle;
+            // Same view-space rect as GetFirstRectForRange. _client.CursorRectangle is local to the
+            // text control, so UIKit placed caret-anchored UI (the iPad number pad popover) at the
+            // top-left of the view instead of next to the text box.
+            var r = _view._cursorRect;
 
-            return new CGRect(rect.X, rect.Y, rect.Width, rect.Height);
+            return new CGRect(r.Left, r.Top, r.Width, r.Height);
         }
 
         UITextPosition IUITextInput.GetClosestPositionToPoint(CGPoint point)
