@@ -216,7 +216,35 @@ namespace Avalonia.Controls
             Children.Clear();
         }
 
-        internal void Refresh() => OnItemsControlItemsChanged(null, CollectionUtils.ResetEventArgs);
+        internal void Refresh()
+        {
+            // Refresh (ItemContainerTheme / ItemTemplate / DisplayMemberBinding changed) is
+            // delivered as a Reset, but unlike a collection Reset every container must be
+            // unrealized and re-prepared even though the items themselves are unchanged.
+            // Panels that try to keep matching containers across a Reset check this flag.
+            IsRefreshingContainers = true;
+
+            try
+            {
+                OnItemsControlItemsChanged(null, CollectionUtils.ResetEventArgs);
+            }
+            finally
+            {
+                IsRefreshingContainers = false;
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the current Reset passed to
+        /// <see cref="OnItemsChanged"/> comes from <see cref="Refresh"/>: all containers must be
+        /// re-prepared and none may be kept for their unchanged item.
+        /// </summary>
+        internal bool IsRefreshingContainers { get; private set; }
+
+        internal ItemsControl? GetItemsControl() => ItemsControl;
+        internal IReadOnlyList<object?> GetItems() => Items;
+        internal void AddPooledChild(Control control) => AddInternalChild(control);
+        internal void RemovePooledChild(Control control) => RemoveInternalChild(control);
 
         private ItemsControl EnsureItemsControl()
         {

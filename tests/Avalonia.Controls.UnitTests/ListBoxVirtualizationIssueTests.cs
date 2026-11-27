@@ -277,9 +277,16 @@ public class ListBoxVirtualizationIssueTests : ScopedTestBase
             items.RemoveAt(1); // Item 0 was at index 1 because of Insert(0, "New Item")
             target.UpdateLayout();
                 
-            // container should be removed from children because RecycleElementOnItemRemoved is called
-            Assert.DoesNotContain(container, panel.Children);
+            // Upstream removes the container from Children here. This fork's ContainerRecyclePool
+            // deliberately keeps pooled containers as hidden children (no detach/re-attach cost on
+            // reuse), so instead check that it is not a ghost: it must be hidden, no longer
+            // realized, cleared of the removed item's content, and owned by the recycle pool.
+            // (DataContext is not cleared on recycle, as upstream.)
             Assert.False(container.IsVisible);
+            Assert.DoesNotContain(container, target.GetRealizedContainers());
+            Assert.Null(container.Content);
+            Assert.Contains(panel.RecyclePoolForTesting!.Values, pool => pool.Contains(container));
+            Assert.Equal(target.GetRealizedContainers().Count(), panel.Children.Count(c => c.IsVisible));
         }
     }
 

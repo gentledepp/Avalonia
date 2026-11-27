@@ -6,6 +6,7 @@ using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 
 namespace Avalonia.Controls
 {
@@ -405,52 +406,106 @@ namespace Avalonia.Controls
         /// <summary>
         /// Scrolls the content up one line.
         /// </summary>
-        public void LineUp() => SetCurrentValue(OffsetProperty, Offset - new Vector(0, _smallChange.Height));
+        public void LineUp() => ScrollBy(new Vector(0, -_smallChange.Height), Offset - new Vector(0, _smallChange.Height));
 
         /// <summary>
         /// Scrolls the content down one line.
         /// </summary>
-        public void LineDown() => SetCurrentValue(OffsetProperty, Offset + new Vector(0, _smallChange.Height));
+        public void LineDown() => ScrollBy(new Vector(0, _smallChange.Height), Offset + new Vector(0, _smallChange.Height));
 
         /// <summary>
         /// Scrolls the content left one line.
         /// </summary>
-        public void LineLeft() => SetCurrentValue(OffsetProperty, Offset - new Vector(_smallChange.Width, 0));
+        public void LineLeft() => ScrollBy(new Vector(-_smallChange.Width, 0), Offset - new Vector(_smallChange.Width, 0));
 
         /// <summary>
         /// Scrolls the content right one line.
         /// </summary>
-        public void LineRight() => SetCurrentValue(OffsetProperty, Offset + new Vector(_smallChange.Width, 0));
+        public void LineRight() => ScrollBy(new Vector(_smallChange.Width, 0), Offset + new Vector(_smallChange.Width, 0));
 
         /// <summary>
         /// Scrolls the content upward by one page.
         /// </summary>
-        public void PageUp() => SetCurrentValue(OffsetProperty, Offset.WithY(Math.Max(Offset.Y - _viewport.Height, 0)));
+        public void PageUp() => PageUp(ScrollSource.Programmatic);
+
+        private void PageUp(ScrollSource source) =>
+            ScrollBy(new Vector(0, -_viewport.Height), Offset.WithY(Math.Max(Offset.Y - _viewport.Height, 0)), source);
 
         /// <summary>
         /// Scrolls the content downward by one page.
         /// </summary>
-        public void PageDown() => SetCurrentValue(OffsetProperty, Offset.WithY(Math.Min(Offset.Y + _viewport.Height, ScrollBarMaximum.Y)));
+        public void PageDown() => PageDown(ScrollSource.Programmatic);
+
+        private void PageDown(ScrollSource source) =>
+            ScrollBy(new Vector(0, _viewport.Height), Offset.WithY(Math.Min(Offset.Y + _viewport.Height, ScrollBarMaximum.Y)), source);
 
         /// <summary>
         /// Scrolls the content left by one page.
         /// </summary>
-        public void PageLeft() => SetCurrentValue(OffsetProperty, Offset.WithX(Math.Max(Offset.X - _viewport.Width, 0)));
+        public void PageLeft() => ScrollBy(new Vector(-_viewport.Width, 0), Offset.WithX(Math.Max(Offset.X - _viewport.Width, 0)));
 
         /// <summary>
         /// Scrolls the content tight by one page.
         /// </summary>
-        public void PageRight() => SetCurrentValue(OffsetProperty, Offset.WithX(Math.Min(Offset.X + _viewport.Width, ScrollBarMaximum.X)));
+        public void PageRight() => ScrollBy(new Vector(_viewport.Width, 0), Offset.WithX(Math.Min(Offset.X + _viewport.Width, ScrollBarMaximum.X)));
 
         /// <summary>
         /// Scrolls to the top-left corner of the content.
         /// </summary>
-        public void ScrollToHome() => SetCurrentValue(OffsetProperty, new Vector(double.NegativeInfinity, double.NegativeInfinity));
+        public void ScrollToHome()
+        {
+            if (ScrollCommandTarget is { } target)
+                target.ScrollToEdge(ScrollEdge.Start);
+            else
+                SetCurrentValue(OffsetProperty, new Vector(double.NegativeInfinity, double.NegativeInfinity));
+        }
 
         /// <summary>
         /// Scrolls to the bottom-left corner of the content.
         /// </summary>
-        public void ScrollToEnd() => SetCurrentValue(OffsetProperty, new Vector(double.NegativeInfinity, double.PositiveInfinity));
+        public void ScrollToEnd()
+        {
+            if (ScrollCommandTarget is { } target)
+                target.ScrollToEdge(ScrollEdge.End);
+            else
+                SetCurrentValue(OffsetProperty, new Vector(double.NegativeInfinity, double.PositiveInfinity));
+        }
+
+        /// <summary>
+        /// Gets the content that receives scroll commands instead of <see cref="Offset"/> writes.
+        /// </summary>
+        internal IScrollCommandTarget? ScrollCommandTarget => (Presenter as ScrollContentPresenter)?.ScrollCommandTarget;
+
+        internal void ScrollBarScrollBy(Orientation orientation, double delta) =>
+            ScrollCommandTarget?.ScrollBy(orientation == Orientation.Horizontal ? new Vector(delta, 0) : new Vector(0, delta), ScrollSource.ScrollBar);
+
+        internal void ScrollBarScrollToEdge(Orientation orientation, ScrollEdge edge)
+        {
+            if (orientation == Orientation.Vertical)
+                ScrollCommandTarget?.ScrollToEdge(edge);
+            else
+                ScrollBarScrollTo(orientation, edge == ScrollEdge.Start ? 0 : ScrollBarMaximum.X);
+        }
+
+        internal void ScrollBarScrollTo(Orientation orientation, double value)
+        {
+            if (ScrollCommandTarget is not { } target)
+                return;
+
+            var max = ScrollBarMaximum;
+            var offset = orientation == Orientation.Horizontal ? Offset.WithX(value) : Offset.WithY(value);
+            target.ScrollToFraction(new Vector(
+                max.X > 0 ? offset.X / max.X : 0,
+                max.Y > 0 ? offset.Y / max.Y : 0));
+        }
+
+        private void ScrollBy(Vector delta, Vector offset, ScrollSource source = ScrollSource.Programmatic)
+        {
+            if (ScrollCommandTarget is { } target)
+                target.ScrollBy(delta, source);
+            else
+                SetCurrentValue(OffsetProperty, offset);
+        }
 
         /// <summary>
         /// Gets the value of the <see cref="BringIntoViewOnFocusChange"/> attached property.
@@ -698,6 +753,17 @@ namespace Avalonia.Controls
 
         internal static Vector CoerceOffset(AvaloniaObject sender, Vector value)
         {
+            // A command target reports its offset in range, and a request is a command, not a clamped value.
+            var commandTarget = sender switch
+            {
+                ScrollViewer scrollViewer => scrollViewer.ScrollCommandTarget,
+                ScrollContentPresenter presenter => presenter.ScrollCommandTarget,
+                _ => null,
+            };
+
+            if (commandTarget is not null)
+                return new Vector(double.IsNaN(value.X) ? 0 : value.X, double.IsNaN(value.Y) ? 0 : value.Y);
+
             var extent = sender.GetValue(ExtentProperty);
             var viewport = sender.GetValue(ViewportProperty);
 
@@ -775,6 +841,7 @@ namespace Avalonia.Controls
             if (change.Property == OffsetProperty)
             {
                 CalculatedPropertiesChanged();
+                UpdateScrollBarValues();
             }
             else if (change.Property == ExtentProperty)
             {
@@ -798,12 +865,12 @@ namespace Avalonia.Controls
         {
             if (e.Key == Key.PageUp)
             {
-                PageUp();
+                PageUp(ScrollSource.Keyboard);
                 e.Handled = true;
             }
             else if (e.Key == Key.PageDown)
             {
-                PageDown();
+                PageDown(ScrollSource.Keyboard);
                 e.Handled = true;
             }
         }
@@ -878,7 +945,22 @@ namespace Avalonia.Controls
             IsExpanded = isExpanded;
         }
 
-        private void OnLayoutUpdated(object? sender, EventArgs e) => RaiseScrollChanged();
+        private void OnLayoutUpdated(object? sender, EventArgs e)
+        {
+            UpdateScrollBarValues();
+            RaiseScrollChanged();
+        }
+
+        // The scrollbars of a command target show the reported offset, also when a request did not scroll
+        // or a scrollbar clamped its value to a new maximum before the offset arrived.
+        private void UpdateScrollBarValues()
+        {
+            if (ScrollCommandTarget is not null)
+            {
+                _horizontalScrollBar?.SetCurrentValue(RangeBase.ValueProperty, Offset.X);
+                _verticalScrollBar?.SetCurrentValue(RangeBase.ValueProperty, Offset.Y);
+            }
+        }
 
         private void RaiseScrollChanged()
         {
