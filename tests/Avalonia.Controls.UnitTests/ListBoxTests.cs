@@ -740,7 +740,16 @@ namespace Avalonia.Controls.UnitTests
                 .ToList();
 
             // "Item1" should remain selected, and now be at the bottom of the viewport.
-            Assert.Equal(Enumerable.Range(0, 10).Select(x => $"Item{10 - x}"), realized);
+            Assert.Equal(98, target.SelectedIndex);
+            var scroll = Assert.IsType<ScrollViewer>(target.Scroll);
+            var selectedContainer = Assert.IsType<ListBoxItem>(target.ContainerFromIndex(98));
+            Assert.Equal(scroll.Offset.Y + scroll.Viewport.Height, selectedContainer.Bounds.Bottom);
+
+            // Upstream expects exactly Item10..Item1. This fork's VirtualizingStackPanel also
+            // realizes the last <= 3 items after the viewport ("don't clip the last element" in
+            // RealizeElements, so the extent is based on measured rather than estimated sizes),
+            // so the single remaining item, Item0, is realized just below the viewport.
+            Assert.Equal(Enumerable.Range(0, 11).Select(x => $"Item{10 - x}"), realized);
         }
 
         [Fact]

@@ -587,7 +587,13 @@ namespace Avalonia.Controls
 
                     var shouldPreserveRealizedElements = false;
 
-                    if (_realizedElements.Count > 0)
+                    // A Refresh (ItemContainerTheme / ItemTemplate / DisplayMemberBinding changed)
+                    // arrives as a Reset with unchanged items, so every realized element would
+                    // match and be preserved or retained without being prepared again — the
+                    // containers would keep the old theme/template. Recycle everything instead.
+                    var isRefresh = IsRefreshingContainers;
+
+                    if (!isRefresh && _realizedElements.Count > 0)
                     {
                         // Check whether every realized item still exists at its current index.
                         var preservedCount = 0;
@@ -643,7 +649,7 @@ namespace Avalonia.Controls
                         // First, retain containers whose DataContext matches items in the
                         // estimated viewport so they can be reused without full re-prepare.
 
-                        if (items.Count > 0 && _realizedElements.Count > 0)
+                        if (!isRefresh && items.Count > 0 && _realizedElements.Count > 0)
                         {
                             var orientation = Orientation;
                             var vpStart = orientation == Orientation.Horizontal ? _viewport.X : _viewport.Y;
